@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { NamahaLogo } from '../NamahaLogo';
-import { Lock, ShieldCheck, ArrowRight, KeyRound, AlertCircle } from 'lucide-react';
+import { ShieldCheck, ArrowRight, KeyRound, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 
 interface AdminLoginProps {
@@ -11,6 +11,7 @@ interface AdminLoginProps {
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
   const [passcode, setPasscode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -63,16 +64,35 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
               <KeyRound className="w-3.5 h-3.5 text-namaha-gold" />
               <span>Enter Security Passcode</span>
             </label>
-            <input
-              type="password"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="Enter passcode..."
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-500 text-sm focus:outline-none focus:border-namaha-gold focus:ring-2 focus:ring-namaha-gold/30 transition"
-              required
-              autoFocus
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
+            
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                placeholder="Enter passcode..."
+                className="w-full pl-4 pr-11 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-500 text-sm focus:outline-none focus:border-namaha-gold focus:ring-2 focus:ring-namaha-gold/30 transition"
+                required
+                autoFocus
+              />
+              
+              {/* Show / Hide Password Eye Toggle */}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-namaha-gold transition p-1"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide passcode' : 'Show passcode'}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5 text-namaha-gold" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+
+            <p className="text-[11px] text-gray-400 mt-1.5">
               Default passcode: <code className="text-namaha-gold font-bold">namahaa2026</code>
             </p>
           </div>
