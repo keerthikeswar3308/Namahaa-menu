@@ -14,22 +14,22 @@ export const NamahaLogo: React.FC<NamahaLogoProps> = ({
 }) => {
   const dimensions = {
     circle: {
-      sm: { width: 44, height: 44 },
-      md: { width: 68, height: 68 },
-      lg: { width: 115, height: 115 },
-      xl: { width: 165, height: 165 },
+      sm: { width: 48, height: 48 },
+      md: { width: 72, height: 72 },
+      lg: { width: 120, height: 120 },
+      xl: { width: 180, height: 180 },
     },
     banner: {
-      sm: { width: 150, height: 50 },
-      md: { width: 225, height: 75 },
-      lg: { width: 330, height: 110 },
-      xl: { width: 450, height: 150 },
+      sm: { width: 220, height: 66 },
+      md: { width: 340, height: 102 },
+      lg: { width: 520, height: 156 },
+      xl: { width: 680, height: 204 },
     },
     text: {
-      sm: { width: 130, height: 36 },
-      md: { width: 190, height: 52 },
-      lg: { width: 270, height: 72 },
-      xl: { width: 370, height: 98 },
+      sm: { width: 140, height: 40 },
+      md: { width: 200, height: 56 },
+      lg: { width: 280, height: 76 },
+      xl: { width: 380, height: 100 },
     },
   };
 

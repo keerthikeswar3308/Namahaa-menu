@@ -17,7 +17,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onOpenTableSelector,
 }) => {
   return (
-    <div className="relative pt-28 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-emerald-50 via-teal-50/70 to-namaha-green-cream dark:from-namaha-green-deep dark:via-namaha-green-dark dark:to-namaha-green-deep border-b border-emerald-950/10 dark:border-namaha-gold/20 overflow-hidden">
+    <div className="relative pt-24 sm:pt-32 pb-16 sm:pb-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-emerald-50 via-teal-50/70 to-namaha-green-cream dark:from-namaha-green-deep dark:via-namaha-green-dark dark:to-namaha-green-deep border-b border-emerald-950/10 dark:border-namaha-gold/20 overflow-hidden">
       
       {/* Vibrant Glow Backdrops */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-400/20 dark:bg-namaha-gold/15 rounded-full blur-[100px] pointer-events-none" />
@@ -34,16 +34,17 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
           </div>
         )}
 
-        {/* Large Logo Graphic */}
-        <div className="mb-6 flex justify-center">
-          <NamahaLogo variant="banner" size="lg" className="shadow-xl rounded-2xl border border-namaha-gold/40 p-2 bg-white dark:bg-namaha-green-dark" />
+        {/* Official Brand Banner Image (Matches Exact User Graphic) */}
+        <div className="mb-8 flex justify-center px-2">
+          <NamahaLogo
+            variant="banner"
+            size="lg"
+            className="shadow-2xl rounded-2xl border-2 border-namaha-gold dark:border-namaha-gold overflow-hidden max-w-full hover:scale-102 transition-transform duration-300"
+          />
         </div>
 
-        {/* Main Title & Subtitle */}
-        <h1 className="text-4xl sm:text-6xl font-serif font-extrabold text-namaha-green-deep dark:text-white tracking-tight leading-tight mb-4">
-          {info.heroTitle || info.name}
-        </h1>
-        <p className="text-lg sm:text-2xl text-amber-700 dark:text-namaha-gold font-medium max-w-2xl mx-auto italic mb-8">
+        {/* Tagline */}
+        <p className="text-lg sm:text-2xl text-amber-700 dark:text-namaha-gold font-serif font-semibold max-w-2xl mx-auto italic mb-8">
           &ldquo;{info.tagline}&rdquo;
         </p>
 
