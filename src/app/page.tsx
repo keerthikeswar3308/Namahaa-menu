@@ -41,17 +41,23 @@ export default function HomePage() {
       setIsTableModalOpen(true);
     }
 
-    // Load menu data
+    // Load local initial cache
     setMenuItems(NamahaStore.getMenuItems());
     setCategories(NamahaStore.getCategories());
     setRestaurantInfo(NamahaStore.getRestaurantInfo());
     setGalleryImages(NamahaStore.getGallery());
 
-    // Asynchronously sync from Supabase if configured
-    NamahaStore.syncMenuItemsFromSupabase().then((syncedItems) => {
-      if (syncedItems && syncedItems.length > 0) {
-        setMenuItems(syncedItems);
-      }
+    // Asynchronously sync all entities from Supabase
+    Promise.all([
+      NamahaStore.syncMenuItemsFromSupabase(),
+      NamahaStore.syncCategoriesFromSupabase(),
+      NamahaStore.syncRestaurantInfoFromSupabase(),
+      NamahaStore.syncGalleryFromSupabase(),
+    ]).then(([syncedItems, syncedCats, syncedInfo, syncedGallery]) => {
+      if (syncedItems && syncedItems.length > 0) setMenuItems(syncedItems);
+      if (syncedCats && syncedCats.length > 0) setCategories(syncedCats);
+      if (syncedInfo) setRestaurantInfo(syncedInfo);
+      if (syncedGallery && syncedGallery.length > 0) setGalleryImages(syncedGallery);
     });
   }, []);
 

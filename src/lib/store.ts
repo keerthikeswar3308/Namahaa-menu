@@ -34,7 +34,9 @@ function setStoredItem<T>(key: string, value: T): void {
 }
 
 export class NamahaStore {
-  // --- MENU ITEMS ---
+  // ==========================================
+  // 1. MENU ITEMS CRUD (SUPABASE + LOCAL CACHE)
+  // ==========================================
   static getMenuItems(): MenuItem[] {
     return getStoredItem<MenuItem[]>(STORAGE_KEYS.MENU_ITEMS, initialMenuItems);
   }
@@ -52,7 +54,7 @@ export class NamahaStore {
         .order('display_order', { ascending: true });
 
       if (error || !data) {
-        console.warn('Supabase menu fetch fallback:', error);
+        console.warn('Supabase menu items fetch fallback:', error);
         return this.getMenuItems();
       }
 
@@ -80,7 +82,7 @@ export class NamahaStore {
         return mappedItems;
       }
     } catch (e) {
-      console.error('Error syncing menu from Supabase:', e);
+      console.error('Error syncing menu items from Supabase:', e);
     }
     return this.getMenuItems();
   }
@@ -133,11 +135,15 @@ export class NamahaStore {
       if (updates.name !== undefined) dbPayload.name = updates.name;
       if (updates.price !== undefined) dbPayload.price = updates.price;
       if (updates.description !== undefined) dbPayload.description = updates.description;
+      if (updates.categoryId !== undefined) dbPayload.category_id = updates.categoryId;
+      if (updates.categoryName !== undefined) dbPayload.category_name = updates.categoryName;
       if (updates.isAvailable !== undefined) dbPayload.is_available = updates.isAvailable;
       if (updates.image !== undefined) dbPayload.image = updates.image;
       if (updates.isPopular !== undefined) dbPayload.is_popular = updates.isPopular;
       if (updates.isChefSpecial !== undefined) dbPayload.is_chef_special = updates.isChefSpecial;
       if (updates.isTodaySpecial !== undefined) dbPayload.is_today_special = updates.isTodaySpecial;
+      if (updates.preparationTime !== undefined) dbPayload.preparation_time = updates.preparationTime;
+      if (updates.chefRecommendation !== undefined) dbPayload.chef_recommendation = updates.chefRecommendation;
 
       supabase.from('menu_items').update(dbPayload).eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase update item error:', error);
@@ -166,13 +172,44 @@ export class NamahaStore {
     this.setMenuItems(initialMenuItems);
   }
 
-  // --- CATEGORIES ---
+  // ==========================================
+  // 2. CATEGORIES CRUD (SUPABASE + LOCAL CACHE)
+  // ==========================================
   static getCategories(): Category[] {
     return getStoredItem<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
   }
 
   static setCategories(categories: Category[]): void {
     setStoredItem(STORAGE_KEYS.CATEGORIES, categories);
+  }
+
+  static async syncCategoriesFromSupabase(): Promise<Category[]> {
+    if (!isSupabaseConfigured()) return this.getCategories();
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error || !data) return this.getCategories();
+
+      const mapped: Category[] = data.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        image: c.image || '',
+        displayOrder: c.display_order || 0,
+        isEnabled: c.is_enabled ?? true,
+      }));
+
+      if (mapped.length > 0) {
+        this.setCategories(mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error syncing categories from Supabase:', e);
+    }
+    return this.getCategories();
   }
 
   static addCategory(category: Omit<Category, 'id'>): Category {
@@ -183,6 +220,20 @@ export class NamahaStore {
     };
     const updated = [...categories, newCategory];
     this.setCategories(updated);
+
+    if (isSupabaseConfigured()) {
+      supabase.from('categories').insert({
+        id: newCategory.id,
+        name: newCategory.name,
+        description: newCategory.description,
+        image: newCategory.image,
+        display_order: newCategory.displayOrder,
+        is_enabled: newCategory.isEnabled,
+      }).then(({ error }) => {
+        if (error) console.error('Supabase add category error:', error);
+      });
+    }
+
     return newCategory;
   }
 
@@ -193,6 +244,20 @@ export class NamahaStore {
     const updated = { ...categories[index], ...updates };
     categories[index] = updated;
     this.setCategories(categories);
+
+    if (isSupabaseConfigured()) {
+      const dbPayload: Record<string, unknown> = {};
+      if (updates.name !== undefined) dbPayload.name = updates.name;
+      if (updates.description !== undefined) dbPayload.description = updates.description;
+      if (updates.image !== undefined) dbPayload.image = updates.image;
+      if (updates.isEnabled !== undefined) dbPayload.is_enabled = updates.isEnabled;
+      if (updates.displayOrder !== undefined) dbPayload.display_order = updates.displayOrder;
+
+      supabase.from('categories').update(dbPayload).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update category error:', error);
+      });
+    }
+
     return updated;
   }
 
@@ -200,22 +265,100 @@ export class NamahaStore {
     const categories = this.getCategories();
     const filtered = categories.filter((c) => c.id !== id);
     this.setCategories(filtered);
+
+    if (isSupabaseConfigured()) {
+      supabase.from('categories').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete category error:', error);
+      });
+    }
+
     return true;
   }
 
-  // --- RESTAURANT INFO ---
+  // ==========================================
+  // 3. RESTAURANT INFO (SUPABASE + LOCAL CACHE)
+  // ==========================================
   static getRestaurantInfo(): RestaurantInfo {
     return getStoredItem<RestaurantInfo>(STORAGE_KEYS.RESTAURANT_INFO, defaultRestaurantInfo);
+  }
+
+  static async syncRestaurantInfoFromSupabase(): Promise<RestaurantInfo> {
+    if (!isSupabaseConfigured()) return this.getRestaurantInfo();
+    try {
+      const { data, error } = await supabase
+        .from('restaurant_info')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (error || !data) return this.getRestaurantInfo();
+
+      const mapped: RestaurantInfo = {
+        name: data.name,
+        tagline: data.tagline || '',
+        description: data.description || '',
+        logoUrl: data.logo_url || '/logo-circle.svg',
+        bannerUrl: data.banner_url || '/logo-banner.svg',
+        phone: data.phone || '',
+        email: data.email || '',
+        address: data.address || '',
+        googleMapsUrl: data.google_maps_url || '',
+        instagramUrl: data.instagram_url || '',
+        facebookUrl: data.facebook_url || '',
+        openingHours: data.opening_hours || [],
+        heroTitle: data.hero_title || '',
+        heroSubtitle: data.hero_subtitle || '',
+        announcementText: data.announcement_text || '',
+        isRestaurantOpen: data.is_restaurant_open ?? true,
+        copyrightText: data.copyright_text || '',
+        themePrimaryColor: '#023835',
+        themeGoldColor: '#E6A12A',
+      };
+
+      setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, mapped);
+      return mapped;
+    } catch (e) {
+      console.error('Error syncing restaurant info from Supabase:', e);
+    }
+    return this.getRestaurantInfo();
   }
 
   static updateRestaurantInfo(info: Partial<RestaurantInfo>): RestaurantInfo {
     const current = this.getRestaurantInfo();
     const updated = { ...current, ...info };
     setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, updated);
+
+    if (isSupabaseConfigured()) {
+      supabase.from('restaurant_info').upsert({
+        id: 1,
+        name: updated.name,
+        tagline: updated.tagline,
+        description: updated.description,
+        logo_url: updated.logoUrl,
+        banner_url: updated.bannerUrl,
+        phone: updated.phone,
+        email: updated.email,
+        address: updated.address,
+        google_maps_url: updated.googleMapsUrl,
+        instagram_url: updated.instagramUrl,
+        facebook_url: updated.facebookUrl,
+        opening_hours: updated.openingHours,
+        hero_title: updated.heroTitle,
+        hero_subtitle: updated.heroSubtitle,
+        announcement_text: updated.announcementText,
+        is_restaurant_open: updated.isRestaurantOpen,
+        copyright_text: updated.copyrightText,
+      }).then(({ error }) => {
+        if (error) console.error('Supabase update restaurant info error:', error);
+      });
+    }
+
     return updated;
   }
 
-  // --- GALLERY ---
+  // ==========================================
+  // 4. GALLERY (SUPABASE + LOCAL CACHE)
+  // ==========================================
   static getGallery(): GalleryImage[] {
     return getStoredItem<GalleryImage[]>(STORAGE_KEYS.GALLERY, defaultGalleryImages);
   }
@@ -224,7 +367,36 @@ export class NamahaStore {
     setStoredItem(STORAGE_KEYS.GALLERY, images);
   }
 
-  // --- TABLE SESSION ---
+  static async syncGalleryFromSupabase(): Promise<GalleryImage[]> {
+    if (!isSupabaseConfigured()) return this.getGallery();
+    try {
+      const { data, error } = await supabase
+        .from('gallery')
+        .select('*');
+
+      if (error || !data) return this.getGallery();
+
+      const mapped: GalleryImage[] = data.map((g) => ({
+        id: g.id,
+        url: g.url,
+        title: g.title,
+        category: g.category,
+        isEnabled: g.is_enabled ?? true,
+      }));
+
+      if (mapped.length > 0) {
+        this.setGallery(mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error syncing gallery from Supabase:', e);
+    }
+    return this.getGallery();
+  }
+
+  // ==========================================
+  // 5. TABLE SESSION
+  // ==========================================
   static getSelectedTable(): number | null {
     if (typeof window === 'undefined') return null;
     const val = sessionStorage.getItem(STORAGE_KEYS.TABLE_NUMBER) || localStorage.getItem(STORAGE_KEYS.TABLE_NUMBER);
@@ -243,7 +415,9 @@ export class NamahaStore {
     localStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
   }
 
-  // --- ADMIN AUTH ---
+  // ==========================================
+  // 6. ADMIN AUTH
+  // ==========================================
   static isAdminLoggedIn(): boolean {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(STORAGE_KEYS.ADMIN_AUTH) === 'true';

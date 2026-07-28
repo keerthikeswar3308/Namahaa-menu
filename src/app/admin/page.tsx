@@ -35,6 +35,18 @@ export default function AdminPage() {
     setCategories(NamahaStore.getCategories());
     setRestaurantInfo(NamahaStore.getRestaurantInfo());
     setGalleryImages(NamahaStore.getGallery());
+
+    Promise.all([
+      NamahaStore.syncMenuItemsFromSupabase(),
+      NamahaStore.syncCategoriesFromSupabase(),
+      NamahaStore.syncRestaurantInfoFromSupabase(),
+      NamahaStore.syncGalleryFromSupabase(),
+    ]).then(([syncedItems, syncedCats, syncedInfo, syncedGallery]) => {
+      if (syncedItems && syncedItems.length > 0) setMenuItems(syncedItems);
+      if (syncedCats && syncedCats.length > 0) setCategories(syncedCats);
+      if (syncedInfo) setRestaurantInfo(syncedInfo);
+      if (syncedGallery && syncedGallery.length > 0) setGalleryImages(syncedGallery);
+    });
   };
 
   const handleLogout = () => {
