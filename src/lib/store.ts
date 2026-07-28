@@ -58,24 +58,39 @@ export class NamahaStore {
         return this.getMenuItems();
       }
 
-      const mappedItems: MenuItem[] = data.map((d) => ({
-        id: d.id,
-        name: d.name,
-        description: d.description || '',
-        price: Number(d.price),
-        categoryId: d.category_id || '',
-        categoryName: d.category_name,
-        image: d.image,
-        isVeg: d.is_veg,
-        preparationTime: d.preparation_time || '10 mins',
-        isAvailable: d.is_available,
-        isPopular: d.is_popular,
-        isChefSpecial: d.is_chef_special,
-        isTodaySpecial: d.is_today_special,
-        ingredients: d.ingredients || [],
-        chefRecommendation: d.chef_recommendation || '',
-        displayOrder: d.display_order || 0,
-      }));
+      const existingCats = this.getCategories();
+
+      const mappedItems: MenuItem[] = data.map((d) => {
+        let catId = d.category_id || '';
+        const catName = d.category_name || '';
+
+        // Auto-heal category ID if category_name matches an existing category
+        if (catName) {
+          const match = existingCats.find((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase());
+          if (match) {
+            catId = match.id;
+          }
+        }
+
+        return {
+          id: d.id,
+          name: d.name,
+          description: d.description || '',
+          price: Number(d.price),
+          categoryId: catId,
+          categoryName: catName,
+          image: d.image,
+          isVeg: d.is_veg,
+          preparationTime: d.preparation_time || '10 mins',
+          isAvailable: d.is_available,
+          isPopular: d.is_popular,
+          isChefSpecial: d.is_chef_special,
+          isTodaySpecial: d.is_today_special,
+          ingredients: d.ingredients || [],
+          chefRecommendation: d.chef_recommendation || '',
+          displayOrder: d.display_order || 0,
+        };
+      });
 
       if (mappedItems.length > 0) {
         this.setMenuItems(mappedItems);

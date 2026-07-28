@@ -68,10 +68,27 @@ export default function HomePage() {
 
   // Filtered Menu Logic
   const filteredItems = useMemo(() => {
+    const activeCatObj = activeCategoryId !== 'all' ? categories.find((c) => c.id === activeCategoryId) : null;
+    const activeCatName = activeCatObj?.name?.trim().toLowerCase();
+
     return menuItems.filter((item) => {
       // Category filter
-      if (activeCategoryId !== 'all' && item.categoryId !== activeCategoryId) {
-        return false;
+      if (activeCategoryId !== 'all') {
+        const matchesId = item.categoryId === activeCategoryId;
+        const matchesName = Boolean(
+          activeCatName &&
+          item.categoryName &&
+          item.categoryName.trim().toLowerCase() === activeCatName
+        );
+        const matchesFuzzy = Boolean(
+          activeCatName &&
+          item.categoryId &&
+          item.categoryId.toLowerCase().includes(activeCatName.replace(/[^a-z0-9]/g, ''))
+        );
+
+        if (!matchesId && !matchesName && !matchesFuzzy) {
+          return false;
+        }
       }
 
       // Search Query filter

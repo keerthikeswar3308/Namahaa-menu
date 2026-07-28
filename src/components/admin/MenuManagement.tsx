@@ -91,7 +91,22 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
 
   const filteredItems = items.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.categoryName.toLowerCase().includes(search.toLowerCase());
-    const matchesCat = selectedCategory === 'all' || item.categoryId === selectedCategory;
+    
+    let matchesCat = selectedCategory === 'all';
+    if (!matchesCat) {
+      const selectedCatObj = categories.find((c) => c.id === selectedCategory);
+      const selectedCatName = selectedCatObj?.name?.trim().toLowerCase();
+      
+      const matchesId = item.categoryId === selectedCategory;
+      const matchesName = Boolean(
+        selectedCatName &&
+        item.categoryName &&
+        item.categoryName.trim().toLowerCase() === selectedCatName
+      );
+
+      matchesCat = matchesId || matchesName;
+    }
+
     return matchesSearch && matchesCat;
   });
 
