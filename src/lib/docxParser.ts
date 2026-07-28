@@ -56,7 +56,7 @@ export function parseMenuTextContent(text: string): ParsedImportResult {
           price: price,
           categoryId: `cat-${currentCategory.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
           categoryName: currentCategory,
-          image: '/logo-circle.svg',
+          image: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
           isVeg: true,
           preparationTime: '10 mins',
           isAvailable: true,

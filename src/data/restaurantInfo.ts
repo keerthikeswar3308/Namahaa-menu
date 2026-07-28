@@ -28,28 +28,28 @@ export const defaultRestaurantInfo: RestaurantInfo = {
 export const defaultGalleryImages: GalleryImage[] = [
   {
     id: 'gal-1',
-    url: '/logo-banner.svg',
+    url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
     title: 'Hot Soft Steamed Idlis',
     category: 'Breakfast',
     isEnabled: true,
   },
   {
     id: 'gal-2',
-    url: '/logo-circle.svg',
+    url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80',
     title: 'Golden Benne Masala Dosa',
     category: 'Special Dosas',
     isEnabled: true,
   },
   {
     id: 'gal-3',
-    url: '/logo-banner.svg',
+    url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80',
     title: 'Ghee Sambar Idly & Vada Combo',
     category: 'Idly & Vada',
     isEnabled: true,
   },
   {
     id: 'gal-4',
-    url: '/logo-circle.svg',
+    url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80',
     title: 'Aromatic Ghee Pongal',
     category: 'Heritage Tiffin',
     isEnabled: true,
