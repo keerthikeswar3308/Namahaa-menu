@@ -5,6 +5,8 @@ import { GalleryImage } from '@/types';
 import { Upload, Link as LinkIcon, Images, Check, Image as ImageIcon, FileImage, Sparkles } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
+import { compressImageFile } from '@/lib/imageUtils';
+
 interface ImagePickerProps {
   currentUrl: string;
   onChangeUrl: (url: string) => void;
@@ -40,9 +42,15 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
     setIsUploading(true);
 
     try {
-      // If Supabase storage is configured, upload to bucket
+      // 1. Client-side canvas compression so photo is ~40KB and displays across all devices!
+      const compressedDataUrl = await compressImageFile(file);
+      onChangeUrl(compressedDataUrl);
+      setUrlInput(compressedDataUrl);
+      setIsUploading(false);
+
+      // 2. Optionally upload to Supabase Storage if configured
       if (isSupabaseConfigured()) {
-        const fileExt = file.name.split('.').pop();
+        const fileExt = file.name.split('.').pop() || 'jpg';
         const filePath = `dishes/${Date.now()}-${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
         
         const { error: uploadErr } = await supabase.storage
@@ -57,23 +65,9 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           if (publicUrlData?.publicUrl) {
             onChangeUrl(publicUrlData.publicUrl);
             setUrlInput(publicUrlData.publicUrl);
-            setIsUploading(false);
-            return;
           }
         }
       }
-
-      // Base64 file reader fallback for immediate local file preview & persistence
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          const dataUrl = event.target.result as string;
-          onChangeUrl(dataUrl);
-          setUrlInput(dataUrl);
-          setIsUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
     } catch (error) {
       console.error('File upload error:', error);
       setIsUploading(false);
