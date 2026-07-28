@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Category, GalleryImage, MenuItem } from '@/types';
 import { ImagePicker } from './ImagePicker';
 import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X } from 'lucide-react';
@@ -26,6 +27,11 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Form State
   const [formData, setFormData] = useState<Partial<MenuItem>>({
@@ -171,10 +177,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
         </select>
       </div>
 
-      {/* Edit / Add Viewport-Centered Fixed Modal Dialog */}
-      {(isAddingNew || editingItem) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-2xl bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl shadow-2xl text-white max-h-[90vh] flex flex-col overflow-hidden my-auto">
+      {/* Edit / Add Viewport-Centered Fixed Modal Dialog via React Portal */}
+      {mounted && (isAddingNew || editingItem) && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md">
+          <div className="w-full max-w-2xl bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl shadow-2xl text-white max-h-[90vh] flex flex-col overflow-hidden my-auto animate-fade-in">
             
             {/* Fixed Sticky Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0 bg-namaha-green-dark">
@@ -352,7 +358,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Food Items - Mobile Cards & Desktop Table */}
