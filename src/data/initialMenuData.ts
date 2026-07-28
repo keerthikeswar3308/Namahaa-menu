@@ -16,24 +16,24 @@ export const initialCategories: Category[] = [
   { id: 'cat-13', name: 'Evening Items', description: 'Fresh flaky parottas, chapathis and kothu specials', displayOrder: 13, isEnabled: true },
 ];
 
-// High quality food images matching dishes
+// Official Namahaa brand food placeholders (Admin can upload custom dish photos from local device)
 const FOOD_IMAGES = {
-  idly: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80',
-  sambarIdly: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80',
-  thatteIdly: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80',
-  miniIdly: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80',
-  vada: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  peruguVada: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  pongal: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80',
-  benneDosa: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  dosa: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  masalaDosa: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  ravvaDosa: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80',
-  pesarattu: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  milletDosa: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  specialDosa: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-  punugulu: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80',
-  parotta: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80',
+  idly: '/logo-circle.svg',
+  sambarIdly: '/logo-banner.svg',
+  thatteIdly: '/logo-circle.svg',
+  miniIdly: '/logo-circle.svg',
+  vada: '/logo-circle.svg',
+  peruguVada: '/logo-banner.svg',
+  pongal: '/logo-circle.svg',
+  benneDosa: '/logo-banner.svg',
+  dosa: '/logo-circle.svg',
+  masalaDosa: '/logo-banner.svg',
+  ravvaDosa: '/logo-circle.svg',
+  pesarattu: '/logo-circle.svg',
+  milletDosa: '/logo-circle.svg',
+  specialDosa: '/logo-banner.svg',
+  punugulu: '/logo-circle.svg',
+  parotta: '/logo-banner.svg',
 };
 
 export const initialMenuItems: MenuItem[] = [

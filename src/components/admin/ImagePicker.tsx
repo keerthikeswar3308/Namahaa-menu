@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { GalleryImage } from '@/types';
 import { Upload, Link as LinkIcon, Images, Check, Image as ImageIcon, FileImage, Sparkles } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { compressImageFile } from '@/lib/imageUtils';
 
 interface ImagePickerProps {
   currentUrl: string;
@@ -12,11 +13,9 @@ interface ImagePickerProps {
   label?: string;
 }
 
-const PRESET_FOOD_IMAGES = [
-  { label: 'Steamed Idli', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80' },
-  { label: 'Sambar Idly / Vada', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
-  { label: 'Crispy Dosa / Benne', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
-  { label: 'Hot Pongal / Snacks', url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80' },
+const PRESET_BRAND_IMAGES = [
+  { label: 'Official Namahaa Banner Logo', url: '/logo-banner.svg' },
+  { label: 'Namahaa Circle Brand Icon', url: '/logo-circle.svg' },
 ];
 
 export const ImagePicker: React.FC<ImagePickerProps> = ({
@@ -40,9 +39,15 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
     setIsUploading(true);
 
     try {
-      // If Supabase storage is configured, upload to bucket
+      // 1. Compress image client-side to ~40KB JPEG so it syncs cleanly across all devices
+      const compressedDataUrl = await compressImageFile(file);
+      onChangeUrl(compressedDataUrl);
+      setUrlInput(compressedDataUrl);
+      setIsUploading(false);
+
+      // 2. Optionally upload to Supabase Storage bucket if configured
       if (isSupabaseConfigured()) {
-        const fileExt = file.name.split('.').pop();
+        const fileExt = file.name.split('.').pop() || 'jpg';
         const filePath = `dishes/${Date.now()}-${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
         
         const { error: uploadErr } = await supabase.storage
@@ -57,25 +62,11 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           if (publicUrlData?.publicUrl) {
             onChangeUrl(publicUrlData.publicUrl);
             setUrlInput(publicUrlData.publicUrl);
-            setIsUploading(false);
-            return;
           }
         }
       }
-
-      // Base64 file reader fallback for immediate local file preview & persistence
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          const dataUrl = event.target.result as string;
-          onChangeUrl(dataUrl);
-          setUrlInput(dataUrl);
-          setIsUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
     } catch (error) {
-      console.error('File upload error:', error);
+      console.error('File processing error:', error);
       setIsUploading(false);
     }
   };
@@ -116,7 +107,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           }`}
         >
           <Upload className="w-4 h-4" />
-          <span>📁 Add Image from Device File</span>
+          <span>📁 Upload Device File</span>
         </button>
 
         {galleryImages.length > 0 && (
@@ -140,7 +131,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Presets</span>
+          <span>Brand Icons</span>
         </button>
 
         <button
@@ -182,11 +173,11 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
             className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md mb-1.5 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
-            <span>Choose Image File from Computer / Mobile</span>
+            <span>Choose Image File from Device (Mobile / PC)</span>
           </button>
 
           <p className="text-xs text-gray-300 font-medium">
-            Tap or click to browse files (PNG, JPG, WEBP, SVG)
+            Photos are automatically compressed so they display on all devices!
           </p>
 
           {uploadedFileName && (
@@ -228,7 +219,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
       {/* Tab 3: Presets */}
       {activeTab === 'presets' && (
         <div className="grid grid-cols-2 gap-2">
-          {PRESET_FOOD_IMAGES.map((preset, idx) => (
+          {PRESET_BRAND_IMAGES.map((preset, idx) => (
             <button
               key={idx}
               type="button"
@@ -236,7 +227,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
               className="flex items-center gap-2.5 p-2 rounded-xl bg-black/40 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500 text-left transition"
             >
               {/* eslint-disable-next-next/no-img-element */}
-              <img src={preset.url} alt={preset.label} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+              <img src={preset.url} alt={preset.label} className="w-10 h-10 rounded-lg object-contain flex-shrink-0 bg-namaha-green-dark p-1" />
               <span className="text-xs font-semibold text-white truncate">{preset.label}</span>
             </button>
           ))}

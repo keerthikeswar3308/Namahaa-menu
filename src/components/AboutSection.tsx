@@ -21,7 +21,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ info }) => {
             <div className="absolute -inset-2 bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl blur-xl opacity-30 group-hover:opacity-60 transition duration-500" />
             <div className="relative rounded-3xl overflow-hidden border-2 border-amber-500/40 dark:border-namaha-gold/40 shadow-2xl bg-white dark:bg-namaha-green-deep h-80 sm:h-[420px]">
               <Image
-                src="https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=1000&auto=format&fit=crop&q=80"
+                src="/logo-banner.svg"
                 alt="Namahaa Tiffin Room Authentic Preparation"
                 fill
                 className="object-cover transition-transform duration-700 group-hover:scale-105"

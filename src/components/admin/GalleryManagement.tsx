@@ -23,7 +23,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
   const [formData, setFormData] = useState<Partial<GalleryImage>>({
     title: '',
     category: 'Breakfast',
-    url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+    url: '/logo-banner.svg',
     isEnabled: true,
   });
 
@@ -31,7 +31,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
     setFormData({
       title: '',
       category: 'Breakfast',
-      url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+      url: '/logo-banner.svg',
       isEnabled: true,
     });
     setEditingImage(null);
