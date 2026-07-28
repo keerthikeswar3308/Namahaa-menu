@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Category, GalleryImage, MenuItem } from '@/types';
 import { ImagePicker } from './ImagePicker';
 import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X } from 'lucide-react';
