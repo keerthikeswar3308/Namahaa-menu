@@ -46,6 +46,13 @@ export default function HomePage() {
     setCategories(NamahaStore.getCategories());
     setRestaurantInfo(NamahaStore.getRestaurantInfo());
     setGalleryImages(NamahaStore.getGallery());
+
+    // Asynchronously sync from Supabase if configured
+    NamahaStore.syncMenuItemsFromSupabase().then((syncedItems) => {
+      if (syncedItems && syncedItems.length > 0) {
+        setMenuItems(syncedItems);
+      }
+    });
   }, []);
 
   const handleTableSelected = (tableNum: number) => {

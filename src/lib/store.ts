@@ -1,6 +1,7 @@
 import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
 import { initialCategories, initialMenuItems } from '@/data/initialMenuData';
 import { defaultGalleryImages, defaultRestaurantInfo } from '@/data/restaurantInfo';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEYS = {
   MENU_ITEMS: 'namahaa_menu_items_v1',
@@ -42,6 +43,48 @@ export class NamahaStore {
     setStoredItem(STORAGE_KEYS.MENU_ITEMS, items);
   }
 
+  static async syncMenuItemsFromSupabase(): Promise<MenuItem[]> {
+    if (!isSupabaseConfigured()) return this.getMenuItems();
+    try {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error || !data) {
+        console.warn('Supabase menu fetch fallback:', error);
+        return this.getMenuItems();
+      }
+
+      const mappedItems: MenuItem[] = data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        description: d.description || '',
+        price: Number(d.price),
+        categoryId: d.category_id || '',
+        categoryName: d.category_name,
+        image: d.image,
+        isVeg: d.is_veg,
+        preparationTime: d.preparation_time || '10 mins',
+        isAvailable: d.is_available,
+        isPopular: d.is_popular,
+        isChefSpecial: d.is_chef_special,
+        isTodaySpecial: d.is_today_special,
+        ingredients: d.ingredients || [],
+        chefRecommendation: d.chef_recommendation || '',
+        displayOrder: d.display_order || 0,
+      }));
+
+      if (mappedItems.length > 0) {
+        this.setMenuItems(mappedItems);
+        return mappedItems;
+      }
+    } catch (e) {
+      console.error('Error syncing menu from Supabase:', e);
+    }
+    return this.getMenuItems();
+  }
+
   static addMenuItem(item: Omit<MenuItem, 'id'>): MenuItem {
     const items = this.getMenuItems();
     const newItem: MenuItem = {
@@ -50,6 +93,30 @@ export class NamahaStore {
     };
     const updated = [newItem, ...items];
     this.setMenuItems(updated);
+
+    if (isSupabaseConfigured()) {
+      supabase.from('menu_items').insert({
+        id: newItem.id,
+        name: newItem.name,
+        description: newItem.description,
+        price: newItem.price,
+        category_id: newItem.categoryId,
+        category_name: newItem.categoryName,
+        image: newItem.image,
+        is_veg: newItem.isVeg,
+        preparation_time: newItem.preparationTime,
+        is_available: newItem.isAvailable,
+        is_popular: newItem.isPopular,
+        is_chef_special: newItem.isChefSpecial,
+        is_today_special: newItem.isTodaySpecial,
+        ingredients: newItem.ingredients,
+        chef_recommendation: newItem.chefRecommendation,
+        display_order: newItem.displayOrder,
+      }).then(({ error }) => {
+        if (error) console.error('Supabase add item error:', error);
+      });
+    }
+
     return newItem;
   }
 
@@ -60,6 +127,23 @@ export class NamahaStore {
     const updatedItem = { ...items[index], ...updates };
     items[index] = updatedItem;
     this.setMenuItems(items);
+
+    if (isSupabaseConfigured()) {
+      const dbPayload: Record<string, unknown> = {};
+      if (updates.name !== undefined) dbPayload.name = updates.name;
+      if (updates.price !== undefined) dbPayload.price = updates.price;
+      if (updates.description !== undefined) dbPayload.description = updates.description;
+      if (updates.isAvailable !== undefined) dbPayload.is_available = updates.isAvailable;
+      if (updates.image !== undefined) dbPayload.image = updates.image;
+      if (updates.isPopular !== undefined) dbPayload.is_popular = updates.isPopular;
+      if (updates.isChefSpecial !== undefined) dbPayload.is_chef_special = updates.isChefSpecial;
+      if (updates.isTodaySpecial !== undefined) dbPayload.is_today_special = updates.isTodaySpecial;
+
+      supabase.from('menu_items').update(dbPayload).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update item error:', error);
+      });
+    }
+
     return updatedItem;
   }
 
@@ -68,6 +152,13 @@ export class NamahaStore {
     const filtered = items.filter((i) => i.id !== id);
     if (filtered.length === items.length) return false;
     this.setMenuItems(filtered);
+
+    if (isSupabaseConfigured()) {
+      supabase.from('menu_items').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete item error:', error);
+      });
+    }
+
     return true;
   }
 

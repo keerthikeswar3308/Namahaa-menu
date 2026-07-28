@@ -17,10 +17,8 @@ const THEME_STORAGE_KEY = 'namahaa_theme_preference';
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Default to light (bright) theme as requested
   const [theme, setThemeState] = useState<Theme>('light');
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
     if (stored === 'dark' || stored === 'light') {
       setThemeState(stored);
