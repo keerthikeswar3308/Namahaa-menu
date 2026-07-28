@@ -44,6 +44,17 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
     chefRecommendation: '',
   });
 
+  useEffect(() => {
+    if (isAddingNew || editingItem) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isAddingNew, editingItem]);
+
   const handleOpenAdd = () => {
     setFormData({
       name: '',
@@ -160,26 +171,30 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
         </select>
       </div>
 
-      {/* Edit / Add Modal Form */}
+      {/* Edit / Add Viewport-Centered Fixed Modal Dialog */}
       {(isAddingNew || editingItem) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="w-full max-w-2xl bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl p-6 sm:p-8 shadow-2xl my-auto text-white">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-2xl bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl shadow-2xl text-white max-h-[90vh] flex flex-col overflow-hidden my-auto">
+            
+            {/* Fixed Sticky Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0 bg-namaha-green-dark">
               <h3 className="text-xl font-serif font-bold text-namaha-gold">
                 {editingItem ? `Edit: ${editingItem.name}` : 'Add New Food Item'}
               </h3>
               <button
+                type="button"
                 onClick={() => {
                   setIsAddingNew(false);
                   setEditingItem(null);
                 }}
-                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-gray-300"
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -315,7 +330,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                 </label>
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+              {/* Sticky Action Footer */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-white/10 sticky bottom-0 bg-namaha-green-dark py-2 z-10">
                 <button
                   type="button"
                   onClick={() => {
