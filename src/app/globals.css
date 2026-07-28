@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-cormorant: 'Cormorant Garamond', Georgia, serif;
+  --font-outfit: 'Outfit', system-ui, sans-serif;
+  --bg-emerald: #023835;
+  --bg-emerald-dark: #002624;
+  --accent-gold: #E6A12A;
+  
+  --bg-main: #F4F8F7;
+  --bg-card: #FFFFFF;
+  --text-primary: #023835;
+  --text-muted: #475569;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-outfit);
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark body {
+  background-color: #011c1a;
+  color: #ffffff;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(2, 56, 53, 0.12);
+}
+
+.dark .glass-panel {
+  background: rgba(2, 56, 53, 0.85);
+  border: 1px solid rgba(230, 161, 42, 0.2);
+}
+
+.gold-glow {
+  box-shadow: 0 4px 25px rgba(230, 161, 42, 0.25);
+}
+
+.emerald-glow {
+  box-shadow: 0 4px 25px rgba(2, 56, 53, 0.12);
+}

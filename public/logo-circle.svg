@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="goldGradCircle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F7B733"/>
+      <stop offset="50%" stop-color="#E6A12A"/>
+      <stop offset="100%" stop-color="#C7881E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Dark Deep Teal Circle -->
+  <circle cx="200" cy="200" r="192" fill="#023933"/>
+  <circle cx="200" cy="200" r="180" fill="none" stroke="url(#goldGradCircle)" stroke-width="7"/>
+
+  <!-- Namaste Emblem -->
+  <g transform="translate(200, 115) scale(0.9)">
+    <g transform="translate(-28, -25)">
+      <!-- Left Hand -->
+      <path d="M 5,65 C 2,45 8,25 18,10 C 22,5 26,0 28,-5 C 28,-5 23,20 20,35 C 16,50 14,65 14,65 Z" fill="url(#goldGradCircle)"/>
+      <path d="M -2,65 C -4,50 2,35 10,20 C 14,12 18,5 20,0 C 20,0 16,22 13,37 C 10,50 7,65 7,65 Z" fill="url(#goldGradCircle)"/>
+      <!-- Right Hand -->
+      <path d="M 51,65 C 54,45 48,25 38,10 C 34,5 30,0 28,-5 C 28,-5 33,20 36,35 C 40,50 42,65 42,65 Z" fill="url(#goldGradCircle)"/>
+      <path d="M 58,65 C 60,50 54,35 46,20 C 42,12 38,5 36,0 C 36,0 40,22 43,37 C 46,50 49,65 49,65 Z" fill="url(#goldGradCircle)"/>
+      <!-- Base Wrist -->
+      <path d="M -5,65 Q 28,82 61,65 L 53,78 Q 28,92 3,78 Z" fill="url(#goldGradCircle)"/>
+    </g>
+  </g>
+
+  <!-- Typography NAMA HAA -->
+  <text x="200" y="235" font-family="'Cormorant Garamond', 'Cinzel', Georgia, serif" font-size="40" font-weight="900" fill="url(#goldGradCircle)" text-anchor="middle" letter-spacing="4">
+    NAMA HAA
+  </text>
+
+  <!-- Cross line through A H A A -->
+  <line x1="80" y1="248" x2="320" y2="248" stroke="url(#goldGradCircle)" stroke-width="2.5"/>
+
+  <!-- Subtitle TIFFIN ROOM -->
+  <text x="200" y="295" font-family="'Cormorant Garamond', 'Cinzel', Georgia, serif" font-size="26" font-weight="700" fill="url(#goldGradCircle)" text-anchor="middle" letter-spacing="6">
+    TIFFIN ROOM
+  </text>
+
+  <!-- PURE VEG Badge -->
+  <text x="200" y="335" font-family="'Outfit', sans-serif" font-size="12" font-weight="800" fill="url(#goldGradCircle)" text-anchor="middle" letter-spacing="3">
+    • PURE VEG •
+  </text>
+</svg>
