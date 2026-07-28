@@ -117,8 +117,13 @@ export default function HomePage() {
   }, [menuItems]);
 
   const handleOpenSearch = () => {
-    const el = document.getElementById('menu-search-bar');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    const el = document.getElementById('menu-search-bar') as HTMLInputElement | null;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        el.focus();
+      }, 300);
+    }
   };
 
   return (

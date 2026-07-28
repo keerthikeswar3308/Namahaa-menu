@@ -150,3 +150,27 @@ INSERT INTO public.gallery (id, url, title, category, is_enabled) VALUES
 ('gal-3', 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80', 'Ghee Sambar Idly & Vada Combo', 'Idly & Vada', true),
 ('gal-4', 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80', 'Aromatic Ghee Pongal', 'Heritage Tiffin', true)
 ON CONFLICT (id) DO NOTHING;
+
+-- ========================================================
+-- 6. SUPABASE STORAGE BUCKET CONFIGURATION (food-images)
+-- ========================================================
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('food-images', 'food-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Public Storage Access Policies for food-images bucket
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Food Images') THEN
+        CREATE POLICY "Public Read Food Images" ON storage.objects FOR SELECT USING (bucket_id = 'food-images');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Upload Food Images') THEN
+        CREATE POLICY "Public Upload Food Images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'food-images');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Update Food Images') THEN
+        CREATE POLICY "Public Update Food Images" ON storage.objects FOR UPDATE USING (bucket_id = 'food-images');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Delete Food Images') THEN
+        CREATE POLICY "Public Delete Food Images" ON storage.objects FOR DELETE USING (bucket_id = 'food-images');
+    END IF;
+END $$;

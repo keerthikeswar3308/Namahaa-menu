@@ -36,6 +36,7 @@ export const SearchAndFilterBar: React.FC<SearchAndFilterBarProps> = ({
           <Search className="w-5 h-5 text-amber-600 dark:text-namaha-gold" />
         </div>
         <input
+          id="menu-search-bar"
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}

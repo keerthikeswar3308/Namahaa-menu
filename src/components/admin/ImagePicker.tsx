@@ -54,12 +54,12 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
         const filePath = `dishes/${Date.now()}-${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
         
         const { error: uploadErr } = await supabase.storage
-          .from('menu-images')
+          .from('food-images')
           .upload(filePath, file, { upsert: true });
 
         if (!uploadErr) {
           const { data: publicUrlData } = supabase.storage
-            .from('menu-images')
+            .from('food-images')
             .getPublicUrl(filePath);
 
           if (publicUrlData?.publicUrl) {
