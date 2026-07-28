@@ -409,14 +409,15 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleOpenEdit(item)}
-                    className="p-2.5 rounded-xl bg-white/10 hover:bg-namaha-gold hover:text-namaha-green-deep transition text-gray-200"
-                    title="Edit Item & Image"
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
+                    title="Edit Food Details, Image & Price"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
                   </button>
                   <button
                     onClick={() => onDeleteItem(item.id)}
-                    className="p-2.5 rounded-xl bg-red-950/50 hover:bg-red-600 transition text-red-300 hover:text-white"
+                    className="p-2 rounded-xl bg-red-950/50 hover:bg-red-600 transition text-red-300 hover:text-white"
                     title="Delete Item"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -442,14 +443,19 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredItems.map((item) => (
-                <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-namaha-green-deep overflow-hidden flex-shrink-0 relative border border-white/10">
+                <tr key={item.id} className="hover:bg-white/5 transition-colors group">
+                  <td 
+                    onClick={() => handleOpenEdit(item)}
+                    className="px-6 py-4 flex items-center gap-3 cursor-pointer"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-namaha-green-deep overflow-hidden flex-shrink-0 relative border border-white/10 group-hover:border-amber-500 transition-colors">
                       {/* eslint-disable-next-next/no-img-element */}
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                     <div>
-                      <div className="font-bold text-white text-base">{item.name}</div>
+                      <div className="font-bold text-white text-base group-hover:text-amber-400 transition-colors flex items-center gap-2">
+                        <span>{item.name}</span>
+                      </div>
                       <div className="text-xs text-gray-400 line-clamp-1">{item.description}</div>
                     </div>
                   </td>
@@ -489,14 +495,15 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleOpenEdit(item)}
-                        className="p-2 rounded-lg bg-white/10 hover:bg-namaha-gold hover:text-namaha-green-deep transition text-gray-200"
-                        title="Edit Item & Image"
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
+                        title="Edit Food Details, Image & Price"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
                       </button>
                       <button
                         onClick={() => onDeleteItem(item.id)}
-                        className="p-2 rounded-lg bg-red-950/50 hover:bg-red-600 transition text-red-300 hover:text-white"
+                        className="p-2 rounded-xl bg-red-950/50 hover:bg-red-600 transition text-red-300 hover:text-white"
                         title="Delete Item"
                       >
                         <Trash2 className="w-4 h-4" />
