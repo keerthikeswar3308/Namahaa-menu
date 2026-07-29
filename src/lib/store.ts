@@ -541,6 +541,26 @@ export class NamahaStore {
     return updated;
   }
 
+  static async resetGalleryToDefault(): Promise<GalleryImage[]> {
+    this.setGallery(defaultGalleryImages);
+    notifyStoreUpdated();
+
+    if (isSupabaseConfigured()) {
+      await supabase.from('gallery').delete().neq('id', 'none');
+      for (const gal of defaultGalleryImages) {
+        await supabase.from('gallery').upsert({
+          id: gal.id,
+          url: gal.url,
+          title: gal.title,
+          category: gal.category,
+          is_enabled: gal.isEnabled,
+        });
+      }
+      notifyStoreUpdated();
+    }
+    return defaultGalleryImages;
+  }
+
   static deleteGalleryImage(id: string): boolean {
     const gallery = this.getGallery();
     const filtered = gallery.filter((g) => g.id !== id);
@@ -615,10 +635,6 @@ export class NamahaStore {
         await this.updateMenuItem(item.id, { image: selectedUrl, displayOrder: idx + 1 });
         count++;
       }
-    }
-
-    for (const gal of defaultGalleryImages) {
-      await this.addGalleryImage(gal);
     }
 
     notifyStoreUpdated();
