@@ -185,22 +185,25 @@ export class NamahaStore {
     notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
-      const dbPayload: Record<string, unknown> = {};
-      if (updates.name !== undefined) dbPayload.name = updates.name;
-      if (updates.price !== undefined) dbPayload.price = updates.price;
-      if (updates.description !== undefined) dbPayload.description = updates.description;
-      if (updates.categoryId !== undefined) dbPayload.category_id = updates.categoryId;
-      if (updates.categoryName !== undefined) dbPayload.category_name = updates.categoryName;
-      if (updates.isAvailable !== undefined) dbPayload.is_available = updates.isAvailable;
-      if (finalImage !== undefined) dbPayload.image = finalImage;
-      if (updates.isPopular !== undefined) dbPayload.is_popular = updates.isPopular;
-      if (updates.isChefSpecial !== undefined) dbPayload.is_chef_special = updates.isChefSpecial;
-      if (updates.isTodaySpecial !== undefined) dbPayload.is_today_special = updates.isTodaySpecial;
-      if (updates.preparationTime !== undefined) dbPayload.preparation_time = updates.preparationTime;
-      if (updates.chefRecommendation !== undefined) dbPayload.chef_recommendation = updates.chefRecommendation;
-      dbPayload.display_order = updatedItem.displayOrder;
+      const { error } = await supabase.from('menu_items').upsert({
+        id: updatedItem.id,
+        name: updatedItem.name,
+        description: updatedItem.description,
+        price: updatedItem.price,
+        category_id: updatedItem.categoryId,
+        category_name: updatedItem.categoryName,
+        image: updatedItem.image,
+        is_veg: updatedItem.isVeg,
+        preparation_time: updatedItem.preparationTime,
+        is_available: updatedItem.isAvailable,
+        is_popular: updatedItem.isPopular,
+        is_chef_special: updatedItem.isChefSpecial,
+        is_today_special: updatedItem.isTodaySpecial,
+        ingredients: updatedItem.ingredients,
+        chef_recommendation: updatedItem.chefRecommendation,
+        display_order: updatedItem.displayOrder,
+      });
 
-      const { error } = await supabase.from('menu_items').upsert({ id, ...dbPayload });
       if (error) console.error('Supabase update item error:', error);
       else notifyStoreUpdated();
     }
@@ -635,6 +638,51 @@ export class NamahaStore {
         await this.updateMenuItem(item.id, { image: selectedUrl, displayOrder: idx + 1 });
         count++;
       }
+    }
+
+    notifyStoreUpdated();
+    return count;
+  }
+
+  static async syncAllMenuItemsToSupabase(): Promise<number> {
+    if (!isSupabaseConfigured()) return 0;
+    const items = this.getMenuItems();
+    const categories = this.getCategories();
+
+    for (const cat of categories) {
+      await supabase.from('categories').upsert({
+        id: cat.id,
+        name: cat.name,
+        description: cat.description,
+        image: cat.image,
+        display_order: cat.displayOrder,
+        is_enabled: cat.isEnabled,
+      });
+    }
+
+    let count = 0;
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      const { error } = await supabase.from('menu_items').upsert({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        category_id: item.categoryId,
+        category_name: item.categoryName,
+        image: item.image,
+        is_veg: item.isVeg,
+        preparation_time: item.preparationTime,
+        is_available: item.isAvailable,
+        is_popular: item.isPopular,
+        is_chef_special: item.isChefSpecial,
+        is_today_special: item.isTodaySpecial,
+        ingredients: item.ingredients,
+        chef_recommendation: item.chefRecommendation,
+        display_order: item.displayOrder || (idx + 1),
+      });
+
+      if (!error) count++;
     }
 
     notifyStoreUpdated();
