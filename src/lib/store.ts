@@ -56,7 +56,8 @@ export class NamahaStore {
       const { data, error } = await supabase
         .from('menu_items')
         .select('*')
-        .order('display_order', { ascending: true });
+        .order('display_order', { ascending: true })
+        .order('id', { ascending: true });
 
       if (error || !data) {
         console.warn('Supabase menu items fetch fallback:', error);
@@ -66,7 +67,7 @@ export class NamahaStore {
       const existingCats = this.getCategories();
       const localItems = this.getMenuItems();
 
-      const mappedItems: MenuItem[] = data.map((d) => {
+      const mappedItems: MenuItem[] = data.map((d, idx) => {
         let catId = d.category_id || '';
         const catName = d.category_name || '';
 
@@ -93,7 +94,7 @@ export class NamahaStore {
           isTodaySpecial: d.is_today_special,
           ingredients: d.ingredients || [],
           chefRecommendation: d.chef_recommendation || '',
-          displayOrder: d.display_order || 0,
+          displayOrder: d.display_order || (idx + 1),
         };
       });
 
@@ -101,9 +102,12 @@ export class NamahaStore {
       const combined = [...mappedItems];
       for (const localItem of localItems) {
         if (!combined.some((c) => c.id === localItem.id)) {
-          combined.unshift(localItem);
+          combined.push(localItem);
         }
       }
+
+      // Sort deterministically by displayOrder to NEVER change menu order when editing
+      combined.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 
       if (combined.length > 0) {
         this.setMenuItems(combined);
@@ -121,9 +125,10 @@ export class NamahaStore {
     const newItem: MenuItem = {
       ...item,
       image: finalImage,
+      displayOrder: item.displayOrder || (items.length + 1),
       id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     };
-    const updated = [newItem, ...items];
+    const updated = [...items, newItem];
     this.setMenuItems(updated);
     notifyStoreUpdated();
 
@@ -171,7 +176,10 @@ export class NamahaStore {
       ...items[index],
       ...updates,
       ...(finalImage ? { image: finalImage } : {}),
+      displayOrder: updates.displayOrder !== undefined ? updates.displayOrder : (items[index].displayOrder || (index + 1)),
     };
+
+    // Preserve exact index in the array so order NEVER changes
     items[index] = updatedItem;
     this.setMenuItems(items);
     notifyStoreUpdated();
@@ -190,6 +198,7 @@ export class NamahaStore {
       if (updates.isTodaySpecial !== undefined) dbPayload.is_today_special = updates.isTodaySpecial;
       if (updates.preparationTime !== undefined) dbPayload.preparation_time = updates.preparationTime;
       if (updates.chefRecommendation !== undefined) dbPayload.chef_recommendation = updates.chefRecommendation;
+      dbPayload.display_order = updatedItem.displayOrder;
 
       const { error } = await supabase.from('menu_items').upsert({ id, ...dbPayload });
       if (error) console.error('Supabase update item error:', error);
@@ -429,7 +438,8 @@ export class NamahaStore {
     try {
       const { data, error } = await supabase
         .from('gallery')
-        .select('*');
+        .select('*')
+        .order('id', { ascending: true });
 
       if (error || !data) return this.getGallery();
 
@@ -447,7 +457,7 @@ export class NamahaStore {
       const combined = [...mapped];
       for (const localItem of localGallery) {
         if (!combined.some((c) => c.id === localItem.id)) {
-          combined.unshift(localItem);
+          combined.push(localItem);
         }
       }
 
@@ -589,7 +599,8 @@ export class NamahaStore {
 
     let count = 0;
     const items = this.getMenuItems();
-    for (const item of items) {
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
       const lower = item.name.toLowerCase();
       let selectedUrl = '';
       if (lower.includes('perugu vada')) selectedUrl = dishImageMap['perugu vada'];
@@ -601,7 +612,7 @@ export class NamahaStore {
       else if (lower.includes('thatte')) selectedUrl = dishImageMap['thatte'];
 
       if (selectedUrl && item.image !== selectedUrl) {
-        await this.updateMenuItem(item.id, { image: selectedUrl });
+        await this.updateMenuItem(item.id, { image: selectedUrl, displayOrder: idx + 1 });
         count++;
       }
     }
