@@ -52,9 +52,11 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
       onChangeUrl(compressedDataUrl);
       setUrlInput(compressedDataUrl);
 
-      // 2. Upload to Supabase Cloud Storage bucket 'food-images'
+      // 2. Upload lightweight compressed Blob to Supabase Cloud Storage bucket 'food-images'
       if (isSupabaseConfigured()) {
-        const { publicUrl, error } = await uploadImageToSupabaseStorage(file, file.name);
+        const res = await fetch(compressedDataUrl);
+        const compressedBlob = await res.blob();
+        const { publicUrl, error } = await uploadImageToSupabaseStorage(compressedBlob, file.name);
         if (publicUrl) {
           onChangeUrl(publicUrl);
           setUrlInput(publicUrl);
@@ -65,7 +67,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
         } else if (error) {
           setUploadStatusMsg({
             type: 'info',
-            text: `Local compressed copy ready (Supabase upload: ${error.message})`,
+            text: `Compressed copy ready (Cloud Notice: ${error.message})`,
           });
         }
       } else {

@@ -102,16 +102,22 @@ export async function uploadImageUrlToSupabaseStorage(
  */
 export async function ensureCloudUrl(url: string): Promise<string> {
   if (!url || typeof url !== 'string') return '';
-  if (!url.startsWith('data:')) return url;
-  if (!isSupabaseConfigured()) return url;
-
-  try {
-    const { publicUrl } = await uploadImageUrlToSupabaseStorage(url);
-    return publicUrl || url;
-  } catch (err) {
-    console.error('ensureCloudUrl error:', err);
+  // Web URLs pass through directly to prevent CORS fetch failures
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
+  // Local base64 data URLs get uploaded to Supabase Cloud Storage bucket
+  if (url.startsWith('data:')) {
+    if (!isSupabaseConfigured()) return url;
+    try {
+      const { publicUrl } = await uploadImageUrlToSupabaseStorage(url);
+      return publicUrl || url;
+    } catch (err) {
+      console.error('ensureCloudUrl error:', err);
+      return url;
+    }
+  }
+  return url;
 }
 
 
