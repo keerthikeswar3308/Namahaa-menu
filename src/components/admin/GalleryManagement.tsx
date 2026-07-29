@@ -81,28 +81,13 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <button
-            onClick={async () => {
-              if (confirm('Restore original 4 default gallery images?')) {
-                await NamahaStore.resetGalleryToDefault();
-                window.location.reload();
-              }
-            }}
-            className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4 text-amber-300" />
-            <span>Restore Original 4 Gallery Photos</span>
-          </button>
-
-          <button
-            onClick={handleOpenAdd}
-            className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-bold text-sm shadow-namaha-gold hover:scale-105 transition-transform flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Upload / Add Gallery Image</span>
-          </button>
-        </div>
+        <button
+          onClick={handleOpenAdd}
+          className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-bold text-sm shadow-namaha-gold hover:scale-105 transition-transform flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Upload / Add Gallery Image</span>
+        </button>
       </div>
 
       {/* Add / Edit Modal */}

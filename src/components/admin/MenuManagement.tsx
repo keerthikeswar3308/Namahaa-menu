@@ -153,20 +153,20 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
       {/* Filter & Search Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-namaha-gold absolute left-3.5 top-3.5" />
+          <Search className="w-4 h-4 text-namaha-gold absolute left-3.5 top-3.5 z-10" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search items..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white/10 border border-white/15 rounded-xl text-sm text-white placeholder-gray-400 focus:outline-none focus:border-namaha-gold"
+            className="w-full pl-10 pr-4 py-2.5 bg-emerald-950/90 border-2 border-namaha-gold/40 rounded-xl text-sm font-medium text-white placeholder-gray-300 focus:outline-none focus:border-namaha-gold shadow-md"
           />
         </div>
 
         <select
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
-          className="w-full sm:w-60 px-4 py-2.5 bg-namaha-green-deep border border-white/15 rounded-xl text-sm text-white focus:outline-none focus:border-namaha-gold"
+          className="w-full sm:w-60 px-4 py-2.5 bg-emerald-950/90 border-2 border-namaha-gold/40 rounded-xl text-sm font-medium text-white focus:outline-none focus:border-namaha-gold shadow-md"
         >
           <option value="all">All Categories ({items.length})</option>
           {categories.map((cat) => (

@@ -115,10 +115,8 @@ export default function AdminPage() {
   };
 
   const handleDeleteGalleryImage = (id: string) => {
-    if (confirm('Are you sure you want to delete this gallery photo?')) {
-      NamahaStore.deleteGalleryImage(id);
-      setGalleryImages(NamahaStore.getGallery());
-    }
+    NamahaStore.deleteGalleryImage(id);
+    setGalleryImages(NamahaStore.getGallery());
   };
 
   const handleToggleGalleryImage = async (id: string, isEnabled: boolean) => {
