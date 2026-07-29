@@ -2,9 +2,8 @@
 
 import React, { useState, useRef } from 'react';
 import { GalleryImage } from '@/types';
-import { Upload, Link as LinkIcon, Images, Check, Image as ImageIcon, FileImage, Sparkles } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-
+import { Upload, Link as LinkIcon, Images, Check, Image as ImageIcon, FileImage, Sparkles, Cloud, CloudUpload, AlertCircle } from 'lucide-react';
+import { isSupabaseConfigured, uploadImageToSupabaseStorage, uploadImageUrlToSupabaseStorage } from '@/lib/supabase';
 import { compressImageFile } from '@/lib/imageUtils';
 
 interface ImagePickerProps {
@@ -15,10 +14,15 @@ interface ImagePickerProps {
 }
 
 const PRESET_FOOD_IMAGES = [
-  { label: 'Steamed Idli', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80' },
-  { label: 'Sambar Idly / Vada', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
-  { label: 'Crispy Dosa / Benne', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
-  { label: 'Hot Pongal / Snacks', url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Crispy Medu Vada', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Perugu Vada (Curd Vada)', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Davangere Benne Dosa', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Pesarattu (Moong Dosa)', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Ravva Dosa (Semolina)', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Ghee Pongal (Khara Pongal)', url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Thatte Idli & Podi', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Sambar Idly Dip', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Filter Coffee', url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80' },
 ];
 
 export const ImagePicker: React.FC<ImagePickerProps> = ({
@@ -27,11 +31,11 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
   galleryImages = [],
   label = 'Food Item Image',
 }) => {
-  // Default tab is 'upload' (local file from device)
   const [activeTab, setActiveTab] = useState<'upload' | 'gallery' | 'presets' | 'url'>('upload');
   const [urlInput, setUrlInput] = useState(currentUrl);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatusMsg, setUploadStatusMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,36 +44,75 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
 
     setUploadedFileName(file.name);
     setIsUploading(true);
+    setUploadStatusMsg({ type: 'info', text: 'Compressing and uploading image...' });
 
     try {
-      // 1. Client-side canvas compression so photo is ~40KB and displays across all devices!
+      // 1. Client-side canvas compression so photo is lightweight (~40KB JPEG)
       const compressedDataUrl = await compressImageFile(file);
       onChangeUrl(compressedDataUrl);
       setUrlInput(compressedDataUrl);
-      setIsUploading(false);
 
-      // 2. Optionally upload to Supabase Storage if configured
+      // 2. Upload to Supabase Cloud Storage bucket 'food-images'
       if (isSupabaseConfigured()) {
-        const fileExt = file.name.split('.').pop() || 'jpg';
-        const filePath = `dishes/${Date.now()}-${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
-        
-        const { error: uploadErr } = await supabase.storage
-          .from('food-images')
-          .upload(filePath, file, { upsert: true });
-
-        if (!uploadErr) {
-          const { data: publicUrlData } = supabase.storage
-            .from('food-images')
-            .getPublicUrl(filePath);
-
-          if (publicUrlData?.publicUrl) {
-            onChangeUrl(publicUrlData.publicUrl);
-            setUrlInput(publicUrlData.publicUrl);
-          }
+        const { publicUrl, error } = await uploadImageToSupabaseStorage(file, file.name);
+        if (publicUrl) {
+          onChangeUrl(publicUrl);
+          setUrlInput(publicUrl);
+          setUploadStatusMsg({
+            type: 'success',
+            text: 'Image saved in Supabase Cloud Storage (food-images)!',
+          });
+        } else if (error) {
+          setUploadStatusMsg({
+            type: 'info',
+            text: `Local compressed copy ready (Supabase upload: ${error.message})`,
+          });
         }
+      } else {
+        setUploadStatusMsg({
+          type: 'success',
+          text: 'Compressed image ready for menu linking!',
+        });
       }
     } catch (error) {
       console.error('File upload error:', error);
+      setUploadStatusMsg({ type: 'error', text: 'Error uploading image file.' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSaveUrlToCloud = async () => {
+    if (!urlInput.trim()) return;
+    setIsUploading(true);
+    setUploadStatusMsg({ type: 'info', text: 'Saving URL to Supabase Cloud Storage...' });
+
+    try {
+      if (isSupabaseConfigured()) {
+        const { publicUrl, error } = await uploadImageUrlToSupabaseStorage(urlInput);
+        if (publicUrl) {
+          onChangeUrl(publicUrl);
+          setUrlInput(publicUrl);
+          setUploadStatusMsg({
+            type: 'success',
+            text: 'External URL saved into Supabase Cloud Storage CDN!',
+          });
+        } else {
+          onChangeUrl(urlInput);
+          setUploadStatusMsg({
+            type: 'info',
+            text: `URL set. (Supabase cloud transfer notice: ${error?.message || 'kept direct link'})`,
+          });
+        }
+      } else {
+        onChangeUrl(urlInput);
+        setUploadStatusMsg({ type: 'success', text: 'Image URL updated successfully!' });
+      }
+    } catch (err) {
+      console.error('URL save error:', err);
+      onChangeUrl(urlInput);
+      setUploadStatusMsg({ type: 'info', text: 'Direct image URL linked to menu item.' });
+    } finally {
       setIsUploading(false);
     }
   };
@@ -77,6 +120,8 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
   const triggerFileBrowser = () => {
     fileInputRef.current?.click();
   };
+
+  const isSupabaseUrl = currentUrl && currentUrl.includes('supabase.co');
 
   return (
     <div className="space-y-3 bg-slate-900/60 dark:bg-black/40 border border-amber-500/30 dark:border-namaha-gold/30 p-4 rounded-2xl">
@@ -89,9 +134,16 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
         {/* Live Preview Badge */}
         {currentUrl && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
-              Selected Image
-            </span>
+            {isSupabaseUrl ? (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/30">
+                <Cloud className="w-3 h-3 text-emerald-400" />
+                Cloud Stored
+              </span>
+            ) : (
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                Selected Image
+              </span>
+            )}
             <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-amber-500 dark:border-namaha-gold shadow-md relative bg-black/60">
               {/* eslint-disable-next-next/no-img-element */}
               <img src={currentUrl} alt="Preview" className="w-full h-full object-cover" />
@@ -110,7 +162,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           }`}
         >
           <Upload className="w-4 h-4" />
-          <span>📁 Add Image from Device File</span>
+          <span>📁 Local File</span>
         </button>
 
         {galleryImages.length > 0 && (
@@ -145,7 +197,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           }`}
         >
           <LinkIcon className="w-4 h-4" />
-          <span>URL</span>
+          <span>Paste URL</span>
         </button>
       </div>
 
@@ -176,11 +228,11 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
             className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md mb-1.5 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
-            <span>Choose Image File from Computer / Mobile</span>
+            <span>Choose Image File from Local Device</span>
           </button>
 
           <p className="text-xs text-gray-300 font-medium">
-            Tap or click to browse files (PNG, JPG, WEBP, SVG)
+            Upload from PC / Phone (JPEG, PNG, WEBP). Automatically saved to Supabase Cloud Storage.
           </p>
 
           {uploadedFileName && (
@@ -201,7 +253,10 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
               <button
                 key={img.id}
                 type="button"
-                onClick={() => onChangeUrl(img.url)}
+                onClick={() => {
+                  onChangeUrl(img.url);
+                  setUrlInput(img.url);
+                }}
                 className={`relative h-16 rounded-xl overflow-hidden border-2 transition ${
                   isSelected ? 'border-amber-500 scale-95 shadow-md' : 'border-transparent opacity-75 hover:opacity-100'
                 }`}
@@ -226,7 +281,10 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
             <button
               key={idx}
               type="button"
-              onClick={() => onChangeUrl(preset.url)}
+              onClick={() => {
+                onChangeUrl(preset.url);
+                setUrlInput(preset.url);
+              }}
               className="flex items-center gap-2.5 p-2 rounded-xl bg-black/40 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500 text-left transition"
             >
               {/* eslint-disable-next-next/no-img-element */}
@@ -239,17 +297,57 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
 
       {/* Tab 4: URL Input */}
       {activeTab === 'url' && (
-        <div>
-          <input
-            type="url"
-            value={urlInput}
-            onChange={(e) => {
-              setUrlInput(e.target.value);
-              onChangeUrl(e.target.value);
-            }}
-            placeholder="Paste image URL (https://...)"
-            className="w-full px-3.5 py-2.5 bg-black/50 border border-white/20 rounded-xl text-xs text-white placeholder-gray-400 focus:border-amber-500 focus:outline-none"
-          />
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => {
+                setUrlInput(e.target.value);
+                onChangeUrl(e.target.value);
+              }}
+              placeholder="Paste image URL (https://...)"
+              className="flex-1 px-3.5 py-2.5 bg-black/50 border border-white/20 rounded-xl text-xs text-white placeholder-gray-400 focus:border-amber-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleSaveUrlToCloud}
+              disabled={isUploading || !urlInput.trim()}
+              className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition whitespace-nowrap shadow"
+            >
+              {isUploading ? (
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <CloudUpload className="w-3.5 h-3.5" />
+              )}
+              <span>Upload URL to Cloud</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 font-medium">
+            Paste any web image URL. You can also click &quot;Upload URL to Cloud&quot; to permanently store it in Supabase Storage.
+          </p>
+        </div>
+      )}
+
+      {/* Status Feedback Banner */}
+      {uploadStatusMsg && (
+        <div
+          className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+            uploadStatusMsg.type === 'success'
+              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
+              : uploadStatusMsg.type === 'error'
+              ? 'bg-red-950/80 text-red-300 border border-red-500/40'
+              : 'bg-amber-950/80 text-amber-300 border border-amber-500/40'
+          }`}
+        >
+          {uploadStatusMsg.type === 'success' ? (
+            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          ) : uploadStatusMsg.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          ) : (
+            <Cloud className="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
+          )}
+          <span>{uploadStatusMsg.text}</span>
         </div>
       )}
     </div>

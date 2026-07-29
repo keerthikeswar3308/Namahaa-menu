@@ -3,6 +3,7 @@
 import React from 'react';
 import { Category, MenuItem, RestaurantInfo } from '@/types';
 import { Utensils, CheckCircle, AlertTriangle, Star, FolderTree, Power, Sparkles, Plus, FileUp, RefreshCw } from 'lucide-react';
+import { NamahaStore } from '@/lib/store';
 
 interface AdminDashboardOverviewProps {
   items: MenuItem[];
@@ -122,7 +123,7 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
           <Sparkles className="w-5 h-5" /> Quick Management Shortcuts
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <button
             onClick={() => onNavigateTab('menu')}
             className="p-4 rounded-2xl bg-white/5 hover:bg-namaha-gold/20 border border-white/10 hover:border-namaha-gold/50 text-left transition flex items-center justify-between group"
@@ -132,6 +133,21 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
               <span className="text-xs text-gray-400">Manage 85+ food items</span>
             </div>
             <Plus className="w-5 h-5 text-namaha-gold group-hover:scale-125 transition-transform" />
+          </button>
+
+          <button
+            onClick={async () => {
+              const count = await NamahaStore.seedSouthIndianDishPhotos();
+              alert(`Successfully assigned authentic dish photos for ${count} items (Vada, Perugu Vada, Benne Dosa, Pesarattu, Ravva Dosa, Ghee Pongal) & saved to Supabase!`);
+              window.location.reload();
+            }}
+            className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 border border-amber-500/50 text-left transition flex items-center justify-between group"
+          >
+            <div>
+              <span className="text-sm font-bold text-amber-300 block">⚡ Auto-Dish Photos</span>
+              <span className="text-xs text-amber-400/80">Vada, Benne Dosa, Pongal...</span>
+            </div>
+            <Sparkles className="w-5 h-5 text-amber-300 group-hover:scale-125 transition-transform" />
           </button>
 
           <button

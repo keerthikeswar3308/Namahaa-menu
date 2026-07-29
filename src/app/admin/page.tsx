@@ -10,9 +10,10 @@ import { CategoryManagement } from '@/components/admin/CategoryManagement';
 import { SettingsManagement } from '@/components/admin/SettingsManagement';
 import { GalleryManagement } from '@/components/admin/GalleryManagement';
 import { DocxImporter } from '@/components/admin/DocxImporter';
+import { CloudImageManager } from '@/components/admin/CloudImageManager';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, Cloud } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -62,11 +63,11 @@ export default function AdminPage() {
     setRestaurantInfo(updated);
   };
 
-  const handleSaveMenuItem = (itemData: MenuItem | Omit<MenuItem, 'id'>) => {
+  const handleSaveMenuItem = async (itemData: MenuItem | Omit<MenuItem, 'id'>) => {
     if ('id' in itemData) {
-      NamahaStore.updateMenuItem(itemData.id, itemData);
+      await NamahaStore.updateMenuItem(itemData.id, itemData);
     } else {
-      NamahaStore.addMenuItem(itemData);
+      await NamahaStore.addMenuItem(itemData);
     }
     setMenuItems(NamahaStore.getMenuItems());
   };
@@ -78,8 +79,8 @@ export default function AdminPage() {
     }
   };
 
-  const handleToggleItemStatus = (id: string, isAvailable: boolean) => {
-    NamahaStore.updateMenuItem(id, { isAvailable });
+  const handleToggleItemStatus = async (id: string, isAvailable: boolean) => {
+    await NamahaStore.updateMenuItem(id, { isAvailable });
     setMenuItems(NamahaStore.getMenuItems());
   };
 
@@ -104,33 +105,25 @@ export default function AdminPage() {
     setRestaurantInfo(updated);
   };
 
-  const handleSaveGalleryImage = (imgData: GalleryImage | Omit<GalleryImage, 'id'>) => {
-    let updated: GalleryImage[];
+  const handleSaveGalleryImage = async (imgData: GalleryImage | Omit<GalleryImage, 'id'>) => {
     if ('id' in imgData) {
-      updated = galleryImages.map((g) => (g.id === imgData.id ? (imgData as GalleryImage) : g));
+      await NamahaStore.updateGalleryImage(imgData.id, imgData);
     } else {
-      const newImg: GalleryImage = {
-        ...imgData,
-        id: `gal-${Date.now()}`,
-      };
-      updated = [newImg, ...galleryImages];
+      await NamahaStore.addGalleryImage(imgData);
     }
-    NamahaStore.setGallery(updated);
-    setGalleryImages(updated);
+    setGalleryImages(NamahaStore.getGallery());
   };
 
   const handleDeleteGalleryImage = (id: string) => {
     if (confirm('Are you sure you want to delete this gallery photo?')) {
-      const updated = galleryImages.filter((g) => g.id !== id);
-      NamahaStore.setGallery(updated);
-      setGalleryImages(updated);
+      NamahaStore.deleteGalleryImage(id);
+      setGalleryImages(NamahaStore.getGallery());
     }
   };
 
-  const handleToggleGalleryImage = (id: string, isEnabled: boolean) => {
-    const updated = galleryImages.map((g) => (g.id === id ? { ...g, isEnabled } : g));
-    NamahaStore.setGallery(updated);
-    setGalleryImages(updated);
+  const handleToggleGalleryImage = async (id: string, isEnabled: boolean) => {
+    await NamahaStore.updateGalleryImage(id, { isEnabled });
+    setGalleryImages(NamahaStore.getGallery());
   };
 
   const handleDocxImportSuccess = (result: ParsedImportResult) => {
@@ -171,11 +164,13 @@ export default function AdminPage() {
   const tabs = [
     { id: 'overview', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'menu', label: 'Menu Items', icon: <Utensils className="w-4 h-4" /> },
+    { id: 'images', label: 'Cloud Image Manager', icon: <Cloud className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4" /> },
     { id: 'import', label: 'Import Word Menu', icon: <FileUp className="w-4 h-4" /> },
     { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'gallery', label: 'Gallery', icon: <Camera className="w-4 h-4" /> },
   ];
+
 
   return (
     <div className="min-h-screen bg-namaha-green-cream dark:bg-namaha-green-deep text-slate-800 dark:text-white flex flex-col justify-between transition-colors duration-300">
@@ -263,6 +258,14 @@ export default function AdminPage() {
             onSaveItem={handleSaveMenuItem}
             onDeleteItem={handleDeleteMenuItem}
             onToggleStatus={handleToggleItemStatus}
+          />
+        )}
+
+        {activeTab === 'images' && (
+          <CloudImageManager
+            items={menuItems}
+            categories={categories}
+            onSaveItem={handleSaveMenuItem}
           />
         )}
 

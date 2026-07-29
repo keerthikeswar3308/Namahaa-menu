@@ -4,6 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { MenuItem } from '@/types';
 import { Clock, Star, Award, Flame, Eye } from 'lucide-react';
+import { getFreshImageUrl } from '@/lib/imageUtils';
 
 interface FoodCardProps {
   item: MenuItem;
@@ -19,9 +20,10 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
       {/* Top Image Container */}
       <div className="relative w-full h-48 sm:h-52 overflow-hidden bg-emerald-100 dark:bg-namaha-green-deep">
         <Image
-          src={item.image}
+          src={getFreshImageUrl(item.image)}
           alt={item.name}
           fill
+          unoptimized
           className="object-cover transition-transform duration-500 group-hover:scale-110"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         />

@@ -4,6 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { GalleryImage } from '@/types';
 import { Camera } from 'lucide-react';
+import { getFreshImageUrl } from '@/lib/imageUtils';
 
 interface GallerySectionProps {
   images: GalleryImage[];
@@ -34,9 +35,10 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ images }) => {
             className="group relative rounded-3xl overflow-hidden border border-emerald-950/15 dark:border-namaha-gold/20 bg-white dark:bg-namaha-green-dark shadow-md hover:shadow-xl hover:shadow-amber-500/15 hover:-translate-y-2 transition-all duration-300 h-64"
           >
             <Image
-              src={img.url}
+              src={getFreshImageUrl(img.url)}
               alt={img.title}
               fill
+              unoptimized
               className="object-cover transition-transform duration-700 group-hover:scale-110"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             />

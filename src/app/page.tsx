@@ -31,23 +31,12 @@ export default function HomePage() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedFoodItem, setSelectedFoodItem] = useState<MenuItem | null>(null);
 
-  useEffect(() => {
-    // Check initial table session
-    const currentTable = NamahaStore.getSelectedTable();
-    if (currentTable) {
-      setSelectedTable(currentTable);
-    } else {
-      // Auto open table selection prompt on first scan
-      setIsTableModalOpen(true);
-    }
-
-    // Load local initial cache
+  const refreshAllData = () => {
     setMenuItems(NamahaStore.getMenuItems());
     setCategories(NamahaStore.getCategories());
     setRestaurantInfo(NamahaStore.getRestaurantInfo());
     setGalleryImages(NamahaStore.getGallery());
 
-    // Asynchronously sync all entities from Supabase
     Promise.all([
       NamahaStore.syncMenuItemsFromSupabase(),
       NamahaStore.syncCategoriesFromSupabase(),
@@ -59,6 +48,28 @@ export default function HomePage() {
       if (syncedInfo) setRestaurantInfo(syncedInfo);
       if (syncedGallery && syncedGallery.length > 0) setGalleryImages(syncedGallery);
     });
+  };
+
+  useEffect(() => {
+    // Check initial table session
+    const currentTable = NamahaStore.getSelectedTable();
+    if (currentTable) {
+      setSelectedTable(currentTable);
+    } else {
+      // Auto open table selection prompt on first scan
+      setIsTableModalOpen(true);
+    }
+
+    refreshAllData();
+
+    // Subscribe to Realtime DB & store updates
+    const unsubscribe = NamahaStore.subscribeToRealtimeChanges(() => {
+      refreshAllData();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleTableSelected = (tableNum: number) => {

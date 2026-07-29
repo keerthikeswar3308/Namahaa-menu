@@ -68,3 +68,27 @@ export async function compressImageFile(
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Ensures an image URL has a cache-busting query parameter (e.g. ?v=timestamp)
+ * so mobile browsers (iOS Safari, Android Chrome) always bypass stale disk/memory cache
+ * and immediately load newly updated images from Supabase Storage CDN.
+ */
+export function getFreshImageUrl(url: string | undefined | null, timestamp?: number): string {
+  if (!url) return '';
+  // Data URLs or local SVG assets do not need query params
+  if (url.startsWith('data:') || url.startsWith('/')) return url;
+
+  try {
+    const ts = timestamp || Date.now();
+    const urlObj = new URL(url);
+    // If it already has a 'v' or 't' timestamp param, update it, otherwise set 'v'
+    urlObj.searchParams.set('v', ts.toString());
+    return urlObj.toString();
+  } catch {
+    // If URL constructor fails on relative path, fallback append
+    const ts = timestamp || Date.now();
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}v=${ts}`;
+  }
+}

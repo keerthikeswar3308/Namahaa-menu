@@ -1,7 +1,7 @@
 import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
 import { initialCategories, initialMenuItems } from '@/data/initialMenuData';
 import { defaultGalleryImages, defaultRestaurantInfo } from '@/data/restaurantInfo';
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, ensureCloudUrl } from './supabase';
 
 const STORAGE_KEYS = {
   MENU_ITEMS: 'namahaa_menu_items_v1',
@@ -33,6 +33,11 @@ function setStoredItem<T>(key: string, value: T): void {
   }
 }
 
+function notifyStoreUpdated(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('namahaa_store_updated'));
+}
+
 export class NamahaStore {
   // ==========================================
   // 1. MENU ITEMS CRUD (SUPABASE + LOCAL CACHE)
@@ -59,12 +64,12 @@ export class NamahaStore {
       }
 
       const existingCats = this.getCategories();
+      const localItems = this.getMenuItems();
 
       const mappedItems: MenuItem[] = data.map((d) => {
         let catId = d.category_id || '';
         const catName = d.category_name || '';
 
-        // Auto-heal category ID if category_name matches an existing category
         if (catName) {
           const match = existingCats.find((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase());
           if (match) {
@@ -92,9 +97,17 @@ export class NamahaStore {
         };
       });
 
-      if (mappedItems.length > 0) {
-        this.setMenuItems(mappedItems);
-        return mappedItems;
+      // Merge local items so unsynced additions are preserved
+      const combined = [...mappedItems];
+      for (const localItem of localItems) {
+        if (!combined.some((c) => c.id === localItem.id)) {
+          combined.unshift(localItem);
+        }
+      }
+
+      if (combined.length > 0) {
+        this.setMenuItems(combined);
+        return combined;
       }
     } catch (e) {
       console.error('Error syncing menu items from Supabase:', e);
@@ -102,17 +115,20 @@ export class NamahaStore {
     return this.getMenuItems();
   }
 
-  static addMenuItem(item: Omit<MenuItem, 'id'>): MenuItem {
+  static async addMenuItem(item: Omit<MenuItem, 'id'>): Promise<MenuItem> {
+    const finalImage = await ensureCloudUrl(item.image);
     const items = this.getMenuItems();
     const newItem: MenuItem = {
       ...item,
+      image: finalImage,
       id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     };
     const updated = [newItem, ...items];
     this.setMenuItems(updated);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
-      supabase.from('menu_items').insert({
+      const { error } = await supabase.from('menu_items').upsert({
         id: newItem.id,
         name: newItem.name,
         description: newItem.description,
@@ -129,21 +145,36 @@ export class NamahaStore {
         ingredients: newItem.ingredients,
         chef_recommendation: newItem.chefRecommendation,
         display_order: newItem.displayOrder,
-      }).then(({ error }) => {
-        if (error) console.error('Supabase add item error:', error);
       });
+
+      if (error) console.error('Supabase add item error:', error);
+      else notifyStoreUpdated();
     }
+
+    // Cross-sync with Gallery if matching title exists
+    this.crossSyncMenuToGallery(newItem.name, newItem.image);
 
     return newItem;
   }
 
-  static updateMenuItem(id: string, updates: Partial<MenuItem>): MenuItem | null {
+  static async updateMenuItem(id: string, updates: Partial<MenuItem>): Promise<MenuItem | null> {
     const items = this.getMenuItems();
     const index = items.findIndex((i) => i.id === id);
     if (index === -1) return null;
-    const updatedItem = { ...items[index], ...updates };
+
+    let finalImage = updates.image;
+    if (updates.image) {
+      finalImage = await ensureCloudUrl(updates.image);
+    }
+
+    const updatedItem = {
+      ...items[index],
+      ...updates,
+      ...(finalImage ? { image: finalImage } : {}),
+    };
     items[index] = updatedItem;
     this.setMenuItems(items);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
       const dbPayload: Record<string, unknown> = {};
@@ -153,16 +184,21 @@ export class NamahaStore {
       if (updates.categoryId !== undefined) dbPayload.category_id = updates.categoryId;
       if (updates.categoryName !== undefined) dbPayload.category_name = updates.categoryName;
       if (updates.isAvailable !== undefined) dbPayload.is_available = updates.isAvailable;
-      if (updates.image !== undefined) dbPayload.image = updates.image;
+      if (finalImage !== undefined) dbPayload.image = finalImage;
       if (updates.isPopular !== undefined) dbPayload.is_popular = updates.isPopular;
       if (updates.isChefSpecial !== undefined) dbPayload.is_chef_special = updates.isChefSpecial;
       if (updates.isTodaySpecial !== undefined) dbPayload.is_today_special = updates.isTodaySpecial;
       if (updates.preparationTime !== undefined) dbPayload.preparation_time = updates.preparationTime;
       if (updates.chefRecommendation !== undefined) dbPayload.chef_recommendation = updates.chefRecommendation;
 
-      supabase.from('menu_items').update(dbPayload).eq('id', id).then(({ error }) => {
-        if (error) console.error('Supabase update item error:', error);
-      });
+      const { error } = await supabase.from('menu_items').upsert({ id, ...dbPayload });
+      if (error) console.error('Supabase update item error:', error);
+      else notifyStoreUpdated();
+    }
+
+    // Cross-sync with Gallery if image changed
+    if (updatedItem.image) {
+      this.crossSyncMenuToGallery(updatedItem.name, updatedItem.image);
     }
 
     return updatedItem;
@@ -173,6 +209,7 @@ export class NamahaStore {
     const filtered = items.filter((i) => i.id !== id);
     if (filtered.length === items.length) return false;
     this.setMenuItems(filtered);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
       supabase.from('menu_items').delete().eq('id', id).then(({ error }) => {
@@ -185,6 +222,7 @@ export class NamahaStore {
 
   static resetMenuItems(): void {
     this.setMenuItems(initialMenuItems);
+    notifyStoreUpdated();
   }
 
   // ==========================================
@@ -235,6 +273,7 @@ export class NamahaStore {
     };
     const updated = [...categories, newCategory];
     this.setCategories(updated);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
       supabase.from('categories').insert({
@@ -259,6 +298,7 @@ export class NamahaStore {
     const updated = { ...categories[index], ...updates };
     categories[index] = updated;
     this.setCategories(categories);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
       const dbPayload: Record<string, unknown> = {};
@@ -280,6 +320,7 @@ export class NamahaStore {
     const categories = this.getCategories();
     const filtered = categories.filter((c) => c.id !== id);
     this.setCategories(filtered);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
       supabase.from('categories').delete().eq('id', id).then(({ error }) => {
@@ -342,6 +383,7 @@ export class NamahaStore {
     const current = this.getRestaurantInfo();
     const updated = { ...current, ...info };
     setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, updated);
+    notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
       supabase.from('restaurant_info').upsert({
@@ -372,7 +414,7 @@ export class NamahaStore {
   }
 
   // ==========================================
-  // 4. GALLERY (SUPABASE + LOCAL CACHE)
+  // 4. GALLERY CRUD (SUPABASE + LOCAL CACHE)
   // ==========================================
   static getGallery(): GalleryImage[] {
     return getStoredItem<GalleryImage[]>(STORAGE_KEYS.GALLERY, defaultGalleryImages);
@@ -391,6 +433,8 @@ export class NamahaStore {
 
       if (error || !data) return this.getGallery();
 
+      const localGallery = this.getGallery();
+
       const mapped: GalleryImage[] = data.map((g) => ({
         id: g.id,
         url: g.url,
@@ -399,9 +443,17 @@ export class NamahaStore {
         isEnabled: g.is_enabled ?? true,
       }));
 
-      if (mapped.length > 0) {
-        this.setGallery(mapped);
-        return mapped;
+      // Merge local items so newly added local items are preserved
+      const combined = [...mapped];
+      for (const localItem of localGallery) {
+        if (!combined.some((c) => c.id === localItem.id)) {
+          combined.unshift(localItem);
+        }
+      }
+
+      if (combined.length > 0) {
+        this.setGallery(combined);
+        return combined;
       }
     } catch (e) {
       console.error('Error syncing gallery from Supabase:', e);
@@ -409,8 +461,192 @@ export class NamahaStore {
     return this.getGallery();
   }
 
+  static async addGalleryImage(img: Omit<GalleryImage, 'id'>): Promise<GalleryImage> {
+    const finalUrl = await ensureCloudUrl(img.url);
+    const gallery = this.getGallery();
+    const newImg: GalleryImage = {
+      ...img,
+      url: finalUrl,
+      id: `gal-${Date.now()}`,
+    };
+    const updated = [newImg, ...gallery];
+    this.setGallery(updated);
+    notifyStoreUpdated();
+
+    if (isSupabaseConfigured()) {
+      const { error } = await supabase.from('gallery').upsert({
+        id: newImg.id,
+        url: newImg.url,
+        title: newImg.title,
+        category: newImg.category,
+        is_enabled: newImg.isEnabled,
+      });
+
+      if (error) console.error('Supabase add gallery image error:', error);
+      else notifyStoreUpdated();
+    }
+
+    // Cross-sync with Menu Items if matching title exists
+    this.crossSyncGalleryToMenu(newImg.title, newImg.url);
+
+    return newImg;
+  }
+
+  static async updateGalleryImage(id: string, updates: Partial<GalleryImage>): Promise<GalleryImage | null> {
+    const gallery = this.getGallery();
+    const index = gallery.findIndex((g) => g.id === id);
+    if (index === -1) return null;
+
+    let finalUrl = updates.url;
+    if (updates.url) {
+      finalUrl = await ensureCloudUrl(updates.url);
+    }
+
+    const updated = {
+      ...gallery[index],
+      ...updates,
+      ...(finalUrl ? { url: finalUrl } : {}),
+    };
+    gallery[index] = updated;
+    this.setGallery(gallery);
+    notifyStoreUpdated();
+
+    if (isSupabaseConfigured()) {
+      const dbPayload: Record<string, unknown> = {};
+      if (finalUrl !== undefined) dbPayload.url = finalUrl;
+      if (updates.title !== undefined) dbPayload.title = updates.title;
+      if (updates.category !== undefined) dbPayload.category = updates.category;
+      if (updates.isEnabled !== undefined) dbPayload.is_enabled = updates.isEnabled;
+
+      const { error } = await supabase.from('gallery').upsert({ id, ...dbPayload });
+      if (error) console.error('Supabase update gallery image error:', error);
+      else notifyStoreUpdated();
+    }
+
+    // Cross-sync with Menu Items if image URL or title changed
+    if (updated.url) {
+      this.crossSyncGalleryToMenu(updated.title, updated.url);
+    }
+
+    return updated;
+  }
+
+  static deleteGalleryImage(id: string): boolean {
+    const gallery = this.getGallery();
+    const filtered = gallery.filter((g) => g.id !== id);
+    if (filtered.length === gallery.length) return false;
+    this.setGallery(filtered);
+    notifyStoreUpdated();
+
+    if (isSupabaseConfigured()) {
+      supabase.from('gallery').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete gallery image error:', error);
+      });
+    }
+
+    return true;
+  }
+
   // ==========================================
-  // 5. TABLE SESSION
+  // 5. CROSS-TABLE AUTOMATIC SYNCHRONIZATION
+  // ==========================================
+  /**
+   * If a Gallery photo is added/updated and matches a Menu Item name,
+   * automatically update the Menu Item's image URL in DB & state.
+   */
+  private static crossSyncGalleryToMenu(title: string, imageUrl: string): void {
+    if (!title || !imageUrl) return;
+    const items = this.getMenuItems();
+    const match = items.find((i) => i.name.trim().toLowerCase() === title.trim().toLowerCase());
+    if (match && match.image !== imageUrl) {
+      this.updateMenuItem(match.id, { image: imageUrl });
+    }
+  }
+
+  /**
+   * If a Menu Item image is updated and matches a Gallery photo title,
+   * automatically update the Gallery photo's URL in DB & state.
+   */
+  private static crossSyncMenuToGallery(name: string, imageUrl: string): void {
+    if (!name || !imageUrl) return;
+    const gallery = this.getGallery();
+    const match = gallery.find((g) => g.title.trim().toLowerCase() === name.trim().toLowerCase());
+    if (match && match.url !== imageUrl) {
+      this.updateGalleryImage(match.id, { url: imageUrl });
+    }
+  }
+
+  static async seedSouthIndianDishPhotos(): Promise<number> {
+    const dishImageMap: Record<string, string> = {
+      'vada': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80',
+      'perugu vada': 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+      'benne': 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80',
+      'pesarattu': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80',
+      'ravva': 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80',
+      'pongal': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80',
+      'thatte': 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+    };
+
+    let count = 0;
+    const items = this.getMenuItems();
+    for (const item of items) {
+      const lower = item.name.toLowerCase();
+      let selectedUrl = '';
+      if (lower.includes('perugu vada')) selectedUrl = dishImageMap['perugu vada'];
+      else if (lower.includes('vada')) selectedUrl = dishImageMap['vada'];
+      else if (lower.includes('benne')) selectedUrl = dishImageMap['benne'];
+      else if (lower.includes('pesarattu')) selectedUrl = dishImageMap['pesarattu'];
+      else if (lower.includes('ravva')) selectedUrl = dishImageMap['ravva'];
+      else if (lower.includes('pongal')) selectedUrl = dishImageMap['pongal'];
+      else if (lower.includes('thatte')) selectedUrl = dishImageMap['thatte'];
+
+      if (selectedUrl && item.image !== selectedUrl) {
+        await this.updateMenuItem(item.id, { image: selectedUrl });
+        count++;
+      }
+    }
+
+    for (const gal of defaultGalleryImages) {
+      await this.addGalleryImage(gal);
+    }
+
+    notifyStoreUpdated();
+    return count;
+  }
+
+  // ==========================================
+  // 6. REALTIME DB & MULTI-TAB SUBSCRIPTIONS
+  // ==========================================
+  static subscribeToRealtimeChanges(onUpdate: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+
+    // 1. Custom Local Window Events
+    const handleLocalEvent = () => onUpdate();
+    window.addEventListener('namahaa_store_updated', handleLocalEvent);
+    window.addEventListener('storage', handleLocalEvent);
+
+    // 2. Supabase Realtime Database Channel
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    if (isSupabaseConfigured()) {
+      channel = supabase
+        .channel('namahaa_realtime_db_channel')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          onUpdate();
+        })
+        .subscribe();
+    }
+
+    return () => {
+      window.removeEventListener('namahaa_store_updated', handleLocalEvent);
+      window.removeEventListener('storage', handleLocalEvent);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }
+
+  // ==========================================
+  // 7. TABLE SESSION
   // ==========================================
   static getSelectedTable(): number | null {
     if (typeof window === 'undefined') return null;
@@ -431,7 +667,7 @@ export class NamahaStore {
   }
 
   // ==========================================
-  // 6. ADMIN AUTH
+  // 8. ADMIN AUTH
   // ==========================================
   static isAdminLoggedIn(): boolean {
     if (typeof window === 'undefined') return false;

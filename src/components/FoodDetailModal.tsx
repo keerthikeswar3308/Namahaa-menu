@@ -4,6 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { MenuItem } from '@/types';
 import { X, Clock, Award, Star, Flame, CheckCircle2, Sparkles, AlertCircle } from 'lucide-react';
+import { getFreshImageUrl } from '@/lib/imageUtils';
 
 interface FoodDetailModalProps {
   item: MenuItem | null;
@@ -29,9 +30,10 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
         {/* Large Header Image */}
         <div className="relative w-full h-64 sm:h-72 bg-emerald-100 dark:bg-namaha-green-deep flex-shrink-0">
           <Image
-            src={item.image}
+            src={getFreshImageUrl(item.image)}
             alt={item.name}
             fill
+            unoptimized
             className="object-cover"
             priority
           />
