@@ -118,23 +118,34 @@ export class NamahaStore {
     notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
+      // Ensure category exists first in categories table to satisfy any foreign key constraint
+      if (newItem.categoryId && newItem.categoryName) {
+        await supabase.from('categories').upsert({
+          id: newItem.categoryId,
+          name: newItem.categoryName,
+          display_order: 1,
+          is_enabled: true,
+        });
+      }
+
       const { error } = await supabase.from('menu_items').upsert({
         id: newItem.id,
         name: newItem.name,
-        description: newItem.description,
+        description: newItem.description || '',
         price: newItem.price,
         category_id: newItem.categoryId,
         category_name: newItem.categoryName,
         image: newItem.image,
-        is_veg: newItem.isVeg,
-        preparation_time: newItem.preparationTime,
-        is_available: newItem.isAvailable,
-        is_popular: newItem.isPopular,
-        is_chef_special: newItem.isChefSpecial,
-        is_today_special: newItem.isTodaySpecial,
-        ingredients: newItem.ingredients,
-        chef_recommendation: newItem.chefRecommendation,
-        display_order: newItem.displayOrder,
+        image_url: newItem.image,
+        is_veg: newItem.isVeg !== false,
+        preparation_time: newItem.preparationTime || '10 mins',
+        is_available: newItem.isAvailable !== false,
+        is_popular: Boolean(newItem.isPopular),
+        is_chef_special: Boolean(newItem.isChefSpecial),
+        is_today_special: Boolean(newItem.isTodaySpecial),
+        ingredients: newItem.ingredients || [],
+        chef_recommendation: newItem.chefRecommendation || '',
+        display_order: newItem.displayOrder || 1,
       });
 
       if (error) console.error('Supabase add item error:', error);
@@ -170,23 +181,33 @@ export class NamahaStore {
     notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
+      if (updatedItem.categoryId && updatedItem.categoryName) {
+        await supabase.from('categories').upsert({
+          id: updatedItem.categoryId,
+          name: updatedItem.categoryName,
+          display_order: 1,
+          is_enabled: true,
+        });
+      }
+
       const { error } = await supabase.from('menu_items').upsert({
         id: updatedItem.id,
         name: updatedItem.name,
-        description: updatedItem.description,
+        description: updatedItem.description || '',
         price: updatedItem.price,
         category_id: updatedItem.categoryId,
         category_name: updatedItem.categoryName,
         image: updatedItem.image,
-        is_veg: updatedItem.isVeg,
-        preparation_time: updatedItem.preparationTime,
-        is_available: updatedItem.isAvailable,
-        is_popular: updatedItem.isPopular,
-        is_chef_special: updatedItem.isChefSpecial,
-        is_today_special: updatedItem.isTodaySpecial,
-        ingredients: updatedItem.ingredients,
-        chef_recommendation: updatedItem.chefRecommendation,
-        display_order: updatedItem.displayOrder,
+        image_url: updatedItem.image,
+        is_veg: updatedItem.isVeg !== false,
+        preparation_time: updatedItem.preparationTime || '10 mins',
+        is_available: updatedItem.isAvailable !== false,
+        is_popular: Boolean(updatedItem.isPopular),
+        is_chef_special: Boolean(updatedItem.isChefSpecial),
+        is_today_special: Boolean(updatedItem.isTodaySpecial),
+        ingredients: updatedItem.ingredients || [],
+        chef_recommendation: updatedItem.chefRecommendation || '',
+        display_order: updatedItem.displayOrder || 1,
       });
 
       if (error) console.error('Supabase update item error:', error);
