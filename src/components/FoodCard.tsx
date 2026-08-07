@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { MenuItem } from '@/types';
 import { Clock, Star, Award, Flame, Eye } from 'lucide-react';
@@ -12,6 +12,12 @@ interface FoodCardProps {
 }
 
 export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
+  const [imgSrc, setImgSrc] = useState<string>(getFreshImageUrl(item.image));
+
+  useEffect(() => {
+    setImgSrc(getFreshImageUrl(item.image));
+  }, [item.image]);
+
   return (
     <div
       onClick={() => onOpenDetails(item)}
@@ -20,10 +26,15 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
       {/* Top Image Container */}
       <div className="relative w-full h-48 sm:h-52 overflow-hidden bg-emerald-100 dark:bg-namaha-green-deep">
         <Image
-          src={getFreshImageUrl(item.image)}
+          src={imgSrc}
           alt={item.name}
           fill
           unoptimized
+          onError={() =>
+            setImgSrc(
+              'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'
+            )
+          }
           className="object-cover transition-transform duration-500 group-hover:scale-110"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         />

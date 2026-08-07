@@ -154,23 +154,31 @@ export function isValidImageUrl(url: string): Promise<boolean> {
 }
 
 /**
- * Ensures an image URL has a cache-busting query parameter (e.g. ?v=timestamp)
- * so mobile browsers (iOS Safari, Android Chrome) always bypass stale disk/memory cache
- * and immediately load newly updated images from Supabase Storage CDN.
+ * Returns a stable, loadable image URL.
+ * If a custom timestamp is provided, appends cache-busting query param.
  */
 export function getFreshImageUrl(url: string | undefined | null, timestamp?: number): string {
-  if (!url) return '';
-  // Data URLs or local SVG assets do not need query params
-  if (url.startsWith('data:') || url.startsWith('/')) return url;
-
-  try {
-    const ts = timestamp || Date.now();
-    const urlObj = new URL(url);
-    urlObj.searchParams.set('v', ts.toString());
-    return urlObj.toString();
-  } catch {
-    const ts = timestamp || Date.now();
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}v=${ts}`;
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80';
   }
+  
+  const trimmed = url.trim();
+
+  // If already a valid absolute URL, data URL, or local asset
+  if (trimmed.startsWith('data:') || trimmed.startsWith('/')) {
+    return trimmed;
+  }
+
+  if (timestamp) {
+    try {
+      const urlObj = new URL(trimmed);
+      urlObj.searchParams.set('v', timestamp.toString());
+      return urlObj.toString();
+    } catch {
+      const separator = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${separator}v=${timestamp}`;
+    }
+  }
+
+  return trimmed;
 }

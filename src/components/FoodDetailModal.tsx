@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { MenuItem } from '@/types';
 import { X, Clock, Award, Star, Flame, CheckCircle2, Sparkles, AlertCircle } from 'lucide-react';
@@ -12,6 +12,14 @@ interface FoodDetailModalProps {
 }
 
 export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose }) => {
+  const [imgSrc, setImgSrc] = useState<string>(item ? getFreshImageUrl(item.image) : '');
+
+  useEffect(() => {
+    if (item) {
+      setImgSrc(getFreshImageUrl(item.image));
+    }
+  }, [item]);
+
   if (!item) return null;
 
   return (
@@ -30,10 +38,15 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
         {/* Large Header Image */}
         <div className="relative w-full h-64 sm:h-72 bg-emerald-100 dark:bg-namaha-green-deep flex-shrink-0">
           <Image
-            src={getFreshImageUrl(item.image)}
+            src={imgSrc}
             alt={item.name}
             fill
             unoptimized
+            onError={() =>
+              setImgSrc(
+                'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'
+              )
+            }
             className="object-cover"
             priority
           />
