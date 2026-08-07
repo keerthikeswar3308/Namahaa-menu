@@ -123,23 +123,14 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
       // Compress client-side
       const compressedBlob = await compressImageToBlob(file, 900, 900, 0.8);
       
-      // Upload to Supabase Storage ('food-images' bucket)
-      if (isSupabaseConfigured()) {
-        const { publicUrl, error } = await uploadImageToSupabaseStorage(compressedBlob, file.name);
-        if (publicUrl) {
-          const freshUrl = getFreshImageUrl(publicUrl);
-          onChangeUrl(freshUrl);
-          setStatus('success', 'Image stored directly in Supabase Cloud Storage (food-images)!');
-        } else {
-          // Fallback to compressed base64 if storage policy error
-          const base64 = await compressImageFile(file);
-          onChangeUrl(base64);
-          setStatus('info', `Saved image. (Supabase Notice: ${error?.message || 'kept local copy'})`);
-        }
+      const { publicUrl, error } = await uploadImageToSupabaseStorage(compressedBlob, file.name);
+      if (publicUrl) {
+        const freshUrl = getFreshImageUrl(publicUrl);
+        onChangeUrl(freshUrl);
+        setStatus('success', 'Image uploaded & saved directly in Supabase Cloud Storage (food-images)! Visible to all devices!');
       } else {
-        const base64 = await compressImageFile(file);
-        onChangeUrl(base64);
-        setStatus('success', 'Image uploaded & compressed!');
+        console.error('Supabase Storage Error:', error);
+        setStatus('error', `Upload Failed: ${error?.message || 'Storage upload error'}`);
       }
     } catch (err) {
       console.error('File upload error:', err);

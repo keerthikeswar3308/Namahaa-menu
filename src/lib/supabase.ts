@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const FALLBACK_SUPABASE_URL = 'https://rhnrcyzzqmqgqoigjmuu.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJobnJjeXp6cW1xZ3FvaWdqbXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNDQ1NzEsImV4cCI6MjEwMDgyMDU3MX0.k_WOrw3ODkgXPWt6VnVdLFhUcuFR0UuTdmb97KX8C_4';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = (): boolean => {
   return (
@@ -13,21 +16,18 @@ export const isSupabaseConfigured = (): boolean => {
 };
 
 // Client instance for public read and interactive menu operations
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-anon-key'
-);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * Uploads a Blob or File directly to Supabase Storage ('food-images' bucket)
- * and returns the public CDN URL.
+ * and returns the public CDN URL that is accessible on all customer devices worldwide.
  */
 export async function uploadImageToSupabaseStorage(
   fileOrBlob: File | Blob,
   customFilename?: string
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   if (!isSupabaseConfigured()) {
-    return { publicUrl: null, error: new Error('Supabase is not configured.') };
+    return { publicUrl: null, error: new Error('Supabase configuration missing.') };
   }
 
   try {
@@ -56,7 +56,7 @@ export async function uploadImageToSupabaseStorage(
       return { publicUrl: publicUrlData.publicUrl, error: null };
     }
 
-    return { publicUrl: null, error: new Error('Could not generate public URL') };
+    return { publicUrl: null, error: new Error('Could not generate public CDN URL') };
   } catch (err) {
     console.error('Unexpected error during storage upload:', err);
     return { publicUrl: null, error: err as Error };
@@ -70,18 +70,16 @@ export async function uploadImageUrlToSupabaseStorage(
   imageUrl: string
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   if (!isSupabaseConfigured()) {
-    return { publicUrl: null, error: new Error('Supabase is not configured.') };
+    return { publicUrl: null, error: new Error('Supabase configuration missing.') };
   }
 
   try {
     let blob: Blob;
 
     if (imageUrl.startsWith('data:')) {
-      // Data URL to Blob
       const res = await fetch(imageUrl);
       blob = await res.blob();
     } else {
-      // Remote URL to Blob
       const response = await fetch(imageUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch image URL: HTTP ${response.status}`);
@@ -98,17 +96,16 @@ export async function uploadImageUrlToSupabaseStorage(
 
 /**
  * Helper to ensure an image URL is uploaded to Supabase Storage if it's a data URL.
- * Returns the public Supabase Storage CDN URL, or original URL on fallback.
+ * Returns the public Supabase Storage CDN URL so it is visible to all customer devices.
  */
 export async function ensureCloudUrl(url: string): Promise<string> {
   if (!url || typeof url !== 'string') return '';
-  // Web URLs pass through directly to prevent CORS fetch failures
+  // Remote HTTP/HTTPS URLs pass through
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  // Local base64 data URLs get uploaded to Supabase Cloud Storage bucket
+  // Local base64 data URLs get uploaded to Supabase Storage bucket
   if (url.startsWith('data:')) {
-    if (!isSupabaseConfigured()) return url;
     try {
       const { publicUrl } = await uploadImageUrlToSupabaseStorage(url);
       return publicUrl || url;
@@ -119,5 +116,3 @@ export async function ensureCloudUrl(url: string): Promise<string> {
   }
   return url;
 }
-
-

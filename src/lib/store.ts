@@ -98,20 +98,9 @@ export class NamahaStore {
         };
       });
 
-      // Merge local items so unsynced additions are preserved
-      const combined = [...mappedItems];
-      for (const localItem of localItems) {
-        if (!combined.some((c) => c.id === localItem.id)) {
-          combined.push(localItem);
-        }
-      }
-
-      // Sort deterministically by displayOrder to NEVER change menu order when editing
-      combined.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
-
-      if (combined.length > 0) {
-        this.setMenuItems(combined);
-        return combined;
+      if (mappedItems.length > 0) {
+        this.setMenuItems(mappedItems);
+        return mappedItems;
       }
     } catch (e) {
       console.error('Error syncing menu items from Supabase:', e);
@@ -456,17 +445,9 @@ export class NamahaStore {
         isEnabled: g.is_enabled ?? true,
       }));
 
-      // Merge local items so newly added local items are preserved
-      const combined = [...mapped];
-      for (const localItem of localGallery) {
-        if (!combined.some((c) => c.id === localItem.id)) {
-          combined.push(localItem);
-        }
-      }
-
-      if (combined.length > 0) {
-        this.setGallery(combined);
-        return combined;
+      if (mapped.length > 0) {
+        this.setGallery(mapped);
+        return mapped;
       }
     } catch (e) {
       console.error('Error syncing gallery from Supabase:', e);
