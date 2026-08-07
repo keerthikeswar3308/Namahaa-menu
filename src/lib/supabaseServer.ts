@@ -11,7 +11,8 @@ const SUPABASE_SERVICE_ROLE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJobnJjeXp6cW1xZ3FvaWdqbXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNDQ1NzEsImV4cCI6MjEwMDgyMDU3MX0.k_WOrw3ODkgXPWt6VnVdLFhUcuFR0UuTdmb97KX8C_4';
 
-export const BUCKET_NAME = 'food-menu-images';
+export const PRIMARY_BUCKET = 'food-images';
+export const FALLBACK_BUCKET = 'food-menu-images';
 
 // Server-side Supabase client for administrative storage operations
 export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -22,27 +23,27 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KE
 });
 
 /**
- * Ensures the 'food-menu-images' storage bucket exists with public read enabled.
+ * Finds the active bucket ('food-images' or 'food-menu-images') or creates it if needed.
  */
-export async function ensureBucketExists(): Promise<boolean> {
+export async function getActiveBucket(): Promise<string> {
   try {
     const { data: buckets } = await supabaseAdmin.storage.listBuckets();
-    const exists = buckets?.some((b) => b.id === BUCKET_NAME || b.name === BUCKET_NAME);
-    if (!exists) {
-      await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB limit
-      });
+    if (buckets && buckets.length > 0) {
+      if (buckets.some((b) => b.name === 'food-images' || b.id === 'food-images')) {
+        return 'food-images';
+      }
+      if (buckets.some((b) => b.name === 'food-menu-images' || b.id === 'food-menu-images')) {
+        return 'food-menu-images';
+      }
     }
-    return true;
   } catch (err) {
-    console.warn('ensureBucketExists warning:', err);
-    return false;
+    console.warn('listBuckets check notice:', err);
   }
+  return PRIMARY_BUCKET;
 }
 
 /**
- * Uploads a binary buffer or Blob to Supabase Storage ('food-menu-images' bucket)
+ * Uploads a binary buffer or Blob to Supabase Storage ('food-images' or 'food-menu-images')
  * using the server service client and returns the public CDN URL.
  */
 export async function uploadBufferToStorage(
@@ -51,19 +52,34 @@ export async function uploadBufferToStorage(
   contentType = 'image/jpeg'
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   try {
-    await ensureBucketExists();
-
+    const bucket = await getActiveBucket();
     const fileExt = filename.split('.').pop() || 'jpg';
     const randomHash = Math.random().toString(36).substring(2, 9);
     const filePath = `dishes/${Date.now()}-${randomHash}.${fileExt}`;
 
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from(BUCKET_NAME)
+    let { error: uploadError } = await supabaseAdmin.storage
+      .from(bucket)
       .upload(filePath, buffer, {
         contentType,
         cacheControl: '3600',
         upsert: true,
       });
+
+    // If bucket upload fails on primary, try fallback bucket
+    if (uploadError && bucket === PRIMARY_BUCKET) {
+      const fallbackUpload = await supabaseAdmin.storage
+        .from(FALLBACK_BUCKET)
+        .upload(filePath, buffer, {
+          contentType,
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (!fallbackUpload.error) {
+        const { data: fbData } = supabaseAdmin.storage.from(FALLBACK_BUCKET).getPublicUrl(filePath);
+        if (fbData?.publicUrl) return { publicUrl: fbData.publicUrl, error: null };
+      }
+    }
 
     if (uploadError) {
       console.error('Server storage upload error:', uploadError);
@@ -71,7 +87,7 @@ export async function uploadBufferToStorage(
     }
 
     const { data: publicUrlData } = supabaseAdmin.storage
-      .from(BUCKET_NAME)
+      .from(bucket)
       .getPublicUrl(filePath);
 
     if (publicUrlData?.publicUrl) {
@@ -86,25 +102,21 @@ export async function uploadBufferToStorage(
 }
 
 /**
- * Deletes an image from the 'food-menu-images' bucket given its public URL.
+ * Deletes an image from the storage bucket given its public URL.
  */
 export async function deleteStorageImageByUrl(imageUrl: string): Promise<boolean> {
-  if (!imageUrl || !imageUrl.includes(BUCKET_NAME)) return false;
+  if (!imageUrl || (!imageUrl.includes('food-images') && !imageUrl.includes('food-menu-images'))) {
+    return false;
+  }
 
   try {
-    // Extract path after /food-menu-images/
-    const parts = imageUrl.split(`${BUCKET_NAME}/`);
+    const bucket = imageUrl.includes('food-images') ? 'food-images' : 'food-menu-images';
+    const parts = imageUrl.split(`${bucket}/`);
     if (parts.length < 2) return false;
 
-    // Clean query parameters like ?v=...
     const filePath = parts[1].split('?')[0];
-
-    const { error } = await supabaseAdmin.storage.from(BUCKET_NAME).remove([filePath]);
-    if (error) {
-      console.warn('deleteStorageImageByUrl error:', error);
-      return false;
-    }
-    return true;
+    const { error } = await supabaseAdmin.storage.from(bucket).remove([filePath]);
+    return !error;
   } catch (err) {
     console.error('deleteStorageImageByUrl exception:', err);
     return false;
