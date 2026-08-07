@@ -51,6 +51,53 @@ export class NamahaStore {
   }
 
   static async syncMenuItemsFromSupabase(): Promise<MenuItem[]> {
+    try {
+      // 1. Primary: Universal server endpoint (bypasses all browser RLS policies)
+      const res = await fetch('/api/menu', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.items && json.items.length > 0) {
+          const cats: Category[] = json.categories || [];
+          if (cats.length > 0) {
+            this.setCategories(
+              cats.map((c: any, idx: number) => ({
+                id: c.id,
+                name: c.name,
+                description: c.description || '',
+                image: c.image || '',
+                displayOrder: c.display_order || idx + 1,
+                isEnabled: c.is_enabled !== false,
+              }))
+            );
+          }
+
+          const mapped: MenuItem[] = json.items.map((d: any, idx: number) => ({
+            id: d.id,
+            name: d.name,
+            description: d.description || '',
+            price: Number(d.price),
+            categoryId: d.category_id || `cat-${d.category_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
+            categoryName: d.category_name || '',
+            image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+            isVeg: d.is_veg !== false,
+            preparationTime: d.preparation_time || '10 mins',
+            isAvailable: d.is_available !== false,
+            isPopular: Boolean(d.is_popular),
+            isChefSpecial: Boolean(d.is_chef_special),
+            isTodaySpecial: Boolean(d.is_today_special),
+            ingredients: d.ingredients || [],
+            chefRecommendation: d.chef_recommendation || '',
+            displayOrder: d.display_order || idx + 1,
+          }));
+
+          this.setMenuItems(mapped);
+          return mapped;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('/api/menu notice, falling back to direct Supabase:', apiErr);
+    }
+
     if (!isSupabaseConfigured()) return this.getMenuItems();
     try {
       const { data, error } = await supabase
@@ -99,13 +146,6 @@ export class NamahaStore {
 
         this.setMenuItems(mappedItems);
         return mappedItems;
-      } else if (data && data.length === 0) {
-        // If DB is empty, auto-push local items to Supabase so items are permanently persisted!
-        const local = this.getMenuItems();
-        if (local.length > 0) {
-          await this.syncAllMenuItemsToSupabase();
-          return local;
-        }
       }
     } catch (e) {
       console.error('Error syncing menu items from Supabase:', e);
@@ -279,37 +319,56 @@ export class NamahaStore {
   static async replaceAllMenuItems(newItems: MenuItem[], newCategories?: Category[]): Promise<boolean> {
     if (newCategories && newCategories.length > 0) {
       this.setCategories(newCategories);
-      if (isSupabaseConfigured()) {
-        try {
-          await supabase.from('categories').upsert(newCategories.map((c) => ({
-            id: c.id,
-            name: c.name,
-            description: c.description || '',
-            image: c.image || '',
-            display_order: c.displayOrder || 1,
-            is_enabled: c.isEnabled !== false,
-          })));
-        } catch (err) {
-          console.error('Categories upsert error:', err);
-        }
-      }
     }
-
     this.setMenuItems(newItems);
     notifyStoreUpdated();
 
+    try {
+      const adminPasscode =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026'
+          : 'namahaa2026';
+
+      // 1. Primary: Server API route (uses SUPABASE_SERVICE_ROLE_KEY to bypass all RLS)
+      const res = await fetch('/api/admin/sync-menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-passcode': adminPasscode,
+        },
+        body: JSON.stringify({
+          items: newItems,
+          categories: newCategories || this.getCategories(),
+          mode: 'replace',
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        console.log('Server menu sync success:', data.message);
+        notifyStoreUpdated();
+        return true;
+      }
+    } catch (err) {
+      console.warn('Server sync route notice, falling back to direct client:', err);
+    }
+
+    // 2. Client fallback
     if (isSupabaseConfigured()) {
       try {
-        // 1. Fetch current IDs in DB
-        const { data: existingDbRows } = await supabase.from('menu_items').select('id');
-        const newIds = new Set(newItems.map((i) => i.id));
-        const idsToDelete = existingDbRows?.map((r) => r.id).filter((id) => !newIds.has(id)) || [];
-
-        if (idsToDelete.length > 0) {
-          await supabase.from('menu_items').delete().in('id', idsToDelete);
+        if (newCategories && newCategories.length > 0) {
+          await supabase.from('categories').upsert(
+            newCategories.map((c) => ({
+              id: c.id,
+              name: c.name,
+              description: c.description || '',
+              image: c.image || '',
+              display_order: c.displayOrder || 1,
+              is_enabled: c.isEnabled !== false,
+            }))
+          );
         }
 
-        // 2. Upsert in batches of 25
         const batchSize = 25;
         for (let i = 0; i < newItems.length; i += batchSize) {
           const batch = newItems.slice(i, i + batchSize);
@@ -338,7 +397,7 @@ export class NamahaStore {
         notifyStoreUpdated();
         return true;
       } catch (err) {
-        console.error('replaceAllMenuItems error:', err);
+        console.error('replaceAllMenuItems client error:', err);
       }
     }
     return true;
