@@ -56,22 +56,20 @@ export class NamahaStore {
       const { data, error } = await supabase
         .from('menu_items')
         .select('*')
-        .order('display_order', { ascending: true })
-        .order('id', { ascending: true });
+        .order('display_order', { ascending: true });
 
       if (error || !data) {
-        console.warn('Supabase menu items fetch fallback:', error);
+        console.warn('Supabase menu items fetch notice:', error);
         return this.getMenuItems();
       }
 
       const existingCats = this.getCategories();
-      const localItems = this.getMenuItems();
 
       const mappedItems: MenuItem[] = data.map((d, idx) => {
         let catId = d.category_id || '';
         const catName = d.category_name || '';
 
-        if (catName) {
+        if (catName && existingCats.length > 0) {
           const match = existingCats.find((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase());
           if (match) {
             catId = match.id;
@@ -83,25 +81,23 @@ export class NamahaStore {
           name: d.name,
           description: d.description || '',
           price: Number(d.price),
-          categoryId: catId,
+          categoryId: catId || `cat-${catName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
           categoryName: catName,
-          image: d.image,
-          isVeg: d.is_veg,
+          image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+          isVeg: d.is_veg !== false,
           preparationTime: d.preparation_time || '10 mins',
-          isAvailable: d.is_available,
-          isPopular: d.is_popular,
-          isChefSpecial: d.is_chef_special,
-          isTodaySpecial: d.is_today_special,
+          isAvailable: d.is_available !== false,
+          isPopular: Boolean(d.is_popular),
+          isChefSpecial: Boolean(d.is_chef_special),
+          isTodaySpecial: Boolean(d.is_today_special),
           ingredients: d.ingredients || [],
           chefRecommendation: d.chef_recommendation || '',
           displayOrder: d.display_order || (idx + 1),
         };
       });
 
-      if (mappedItems.length > 0) {
-        this.setMenuItems(mappedItems);
-        return mappedItems;
-      }
+      this.setMenuItems(mappedItems);
+      return mappedItems;
     } catch (e) {
       console.error('Error syncing menu items from Supabase:', e);
     }
@@ -301,19 +297,17 @@ export class NamahaStore {
 
       if (error || !data) return this.getCategories();
 
-      const mapped: Category[] = data.map((c) => ({
+      const mapped: Category[] = data.map((c, idx) => ({
         id: c.id,
         name: c.name,
         description: c.description || '',
         image: c.image || '',
-        displayOrder: c.display_order || 0,
+        displayOrder: c.display_order || idx + 1,
         isEnabled: c.is_enabled ?? true,
       }));
 
-      if (mapped.length > 0) {
-        this.setCategories(mapped);
-        return mapped;
-      }
+      this.setCategories(mapped);
+      return mapped;
     } catch (e) {
       console.error('Error syncing categories from Supabase:', e);
     }

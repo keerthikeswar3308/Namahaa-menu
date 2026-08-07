@@ -62,13 +62,30 @@ export default function HomePage() {
 
     refreshAllData();
 
-    // Subscribe to Realtime DB & store updates
+    // 1. Subscribe to Realtime DB & local store updates
     const unsubscribe = NamahaStore.subscribeToRealtimeChanges(() => {
       refreshAllData();
     });
 
+    // 2. Poll every 4 seconds for instant cross-device synchronicity
+    const interval = setInterval(() => {
+      refreshAllData();
+    }, 4000);
+
+    // 3. Sync immediately when user switches tabs or unlocks phone
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshAllData();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
     return () => {
       unsubscribe();
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
 
