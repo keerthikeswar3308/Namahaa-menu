@@ -123,8 +123,42 @@ export default function AdminPage() {
     setGalleryImages(NamahaStore.getGallery());
   };
 
-  const handleDocxImportSuccess = (result: ParsedImportResult) => {
-    // Merge Categories
+  const handleDocxImportSuccess = (result: ParsedImportResult, mode: 'replace' | 'merge' = 'merge') => {
+    if (mode === 'replace') {
+      // 1. Clean slate: Generate new categories and items
+      const newCategories: Category[] = result.categories.map((c, idx) => ({
+        id: `cat-${c.name.toLowerCase().replace(/[^a-z0-9]/g, '-') || idx + 1}`,
+        name: c.name,
+        description: c.description || `${c.name} specialties`,
+        displayOrder: c.displayOrder || idx + 1,
+        isEnabled: true,
+      }));
+
+      const newItems: MenuItem[] = result.items.map((i, idx) => {
+        const matchCat = newCategories.find(
+          (c) => c.name.toLowerCase() === i.categoryName.toLowerCase()
+        );
+        return {
+          id: `item-${Date.now()}-${idx + 1}`,
+          name: i.name,
+          description: i.description || `Authentic ${i.name.toLowerCase()}`,
+          price: i.price,
+          categoryId: matchCat ? matchCat.id : newCategories[0]?.id || 'cat-general',
+          categoryName: i.categoryName,
+          image: i.image || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+          isVeg: i.isVeg !== false,
+          preparationTime: i.preparationTime || '10 mins',
+          isAvailable: true,
+          displayOrder: i.displayOrder || idx + 1,
+        };
+      });
+
+      NamahaStore.replaceAllMenuItems(newItems, newCategories);
+      loadAllData();
+      return;
+    }
+
+    // 2. Merge mode: Add new categories and append items
     const existingCats = NamahaStore.getCategories();
     let currentCatList = [...existingCats];
     for (const newCat of result.categories) {
@@ -144,7 +178,6 @@ export default function AdminPage() {
     }
 
     loadAllData();
-    setActiveTab('menu');
   };
 
   const handleResetMenu = () => {
@@ -152,6 +185,11 @@ export default function AdminPage() {
       NamahaStore.resetMenuItems();
       loadAllData();
     }
+  };
+
+  const handleClearAllItems = () => {
+    NamahaStore.clearAllMenuItems();
+    loadAllData();
   };
 
   if (!isAuthenticated) {
@@ -266,7 +304,16 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'import' && (
-          <DocxImporter onImportSuccess={handleDocxImportSuccess} />
+          <DocxImporter
+            currentItems={menuItems}
+            categories={categories}
+            galleryImages={galleryImages}
+            onImportSuccess={handleDocxImportSuccess}
+            onDeleteItem={handleDeleteMenuItem}
+            onSaveItem={handleSaveMenuItem}
+            onClearAllItems={handleClearAllItems}
+            onResetDefaultMenu={handleResetMenu}
+          />
         )}
 
         {activeTab === 'settings' && (

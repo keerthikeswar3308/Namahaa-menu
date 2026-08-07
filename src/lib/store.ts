@@ -228,7 +228,56 @@ export class NamahaStore {
 
   static resetMenuItems(): void {
     this.setMenuItems(initialMenuItems);
+    this.setCategories(initialCategories);
     notifyStoreUpdated();
+  }
+
+  static clearAllMenuItems(): void {
+    this.setMenuItems([]);
+    notifyStoreUpdated();
+    if (isSupabaseConfigured()) {
+      supabase.from('menu_items').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(({ error }) => {
+        if (error) console.error('Supabase clear items error:', error);
+      });
+    }
+  }
+
+  static replaceAllMenuItems(newItems: MenuItem[], newCategories?: Category[]): void {
+    if (newCategories && newCategories.length > 0) {
+      this.setCategories(newCategories);
+      if (isSupabaseConfigured()) {
+        supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(() => {
+          supabase.from('categories').upsert(newCategories.map(c => ({
+            id: c.id,
+            name: c.name,
+            description: c.description || '',
+            display_order: c.displayOrder || 1,
+            is_enabled: c.isEnabled !== false,
+          })));
+        });
+      }
+    }
+
+    this.setMenuItems(newItems);
+    notifyStoreUpdated();
+
+    if (isSupabaseConfigured()) {
+      supabase.from('menu_items').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(() => {
+        supabase.from('menu_items').upsert(newItems.map(i => ({
+          id: i.id,
+          name: i.name,
+          description: i.description || '',
+          price: i.price,
+          category_id: i.categoryId,
+          category_name: i.categoryName,
+          image_url: i.image,
+          is_veg: i.isVeg,
+          preparation_time: i.preparationTime,
+          is_available: i.isAvailable,
+          display_order: i.displayOrder,
+        })));
+      });
+    }
   }
 
   // ==========================================
