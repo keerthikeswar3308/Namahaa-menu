@@ -1,7 +1,7 @@
 import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
 import { initialCategories, initialMenuItems } from '@/data/initialMenuData';
 import { defaultGalleryImages, defaultRestaurantInfo } from '@/data/restaurantInfo';
-import { supabase, isSupabaseConfigured, ensureCloudUrl } from './supabase';
+import { supabase, isSupabaseConfigured, ensureCloudUrl, deleteImageViaAdminApi } from './supabase';
 
 const STORAGE_KEYS = {
   MENU_ITEMS: 'namahaa_menu_items_v1',
@@ -207,10 +207,15 @@ export class NamahaStore {
 
   static deleteMenuItem(id: string): boolean {
     const items = this.getMenuItems();
+    const itemToDelete = items.find((i) => i.id === id);
     const filtered = items.filter((i) => i.id !== id);
     if (filtered.length === items.length) return false;
     this.setMenuItems(filtered);
     notifyStoreUpdated();
+
+    if (itemToDelete?.image && itemToDelete.image.includes('food-menu-images')) {
+      deleteImageViaAdminApi(itemToDelete.image);
+    }
 
     if (isSupabaseConfigured()) {
       supabase.from('menu_items').delete().eq('id', id).then(({ error }) => {
@@ -547,10 +552,15 @@ export class NamahaStore {
 
   static deleteGalleryImage(id: string): boolean {
     const gallery = this.getGallery();
+    const imgToDelete = gallery.find((g) => g.id === id);
     const filtered = gallery.filter((g) => g.id !== id);
     if (filtered.length === gallery.length) return false;
     this.setGallery(filtered);
     notifyStoreUpdated();
+
+    if (imgToDelete?.url && imgToDelete.url.includes('food-menu-images')) {
+      deleteImageViaAdminApi(imgToDelete.url);
+    }
 
     if (isSupabaseConfigured()) {
       supabase.from('gallery').delete().eq('id', id).then(({ error }) => {

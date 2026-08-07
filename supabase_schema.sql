@@ -152,25 +152,18 @@ INSERT INTO public.gallery (id, url, title, category, is_enabled) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ========================================================
--- 6. SUPABASE STORAGE BUCKET CONFIGURATION (food-images)
+-- 6. SUPABASE STORAGE BUCKET CONFIGURATION (food-menu-images)
+-- Secure Architecture: Public Read Only for Customers
+-- Uploads / Deletions run securely via Next.js Server API
 -- ========================================================
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('food-images', 'food-images', true)
+VALUES ('food-menu-images', 'food-menu-images', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Public Storage Access Policies for food-images bucket
+-- Customers have public read access only (no anonymous upload/delete)
 DO $$ 
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Food Images') THEN
-        CREATE POLICY "Public Read Food Images" ON storage.objects FOR SELECT USING (bucket_id = 'food-images');
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Upload Food Images') THEN
-        CREATE POLICY "Public Upload Food Images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'food-images');
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Update Food Images') THEN
-        CREATE POLICY "Public Update Food Images" ON storage.objects FOR UPDATE USING (bucket_id = 'food-images');
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Delete Food Images') THEN
-        CREATE POLICY "Public Delete Food Images" ON storage.objects FOR DELETE USING (bucket_id = 'food-images');
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Food Menu Images') THEN
+        CREATE POLICY "Public Read Food Menu Images" ON storage.objects FOR SELECT USING (bucket_id = 'food-menu-images');
     END IF;
 END $$;

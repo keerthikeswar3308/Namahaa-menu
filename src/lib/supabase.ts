@@ -6,6 +6,8 @@ const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3M
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
 
+export const BUCKET_NAME = 'food-menu-images';
+
 export const isSupabaseConfigured = (): boolean => {
   return (
     Boolean(supabaseUrl) &&
@@ -15,103 +17,97 @@ export const isSupabaseConfigured = (): boolean => {
   );
 };
 
-// Client instance for public read and interactive menu operations
+// Client instance for public read and interactive menu operations (Anon Read Only)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
- * Uploads a Blob or File directly to Supabase Storage ('food-images' bucket)
- * and returns the public CDN URL that is accessible on all customer devices worldwide.
+ * Uploads a File, Blob, Image URL, or Base64 Data URL to Supabase Storage ('food-menu-images')
+ * via the secure Next.js Server API route (/api/admin/upload-image).
+ * This keeps the service role key safe on the server and allows only authorized admin uploads.
  */
-export async function uploadImageToSupabaseStorage(
-  fileOrBlob: File | Blob,
+export async function uploadImageViaAdminApi(
+  fileOrBlobOrUrl: File | Blob | string,
   customFilename?: string
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
-  if (!isSupabaseConfigured()) {
-    return { publicUrl: null, error: new Error('Supabase configuration missing.') };
-  }
-
   try {
-    const fileExt = customFilename?.split('.').pop() || (fileOrBlob.type === 'image/png' ? 'png' : 'jpg');
-    const randomHash = Math.random().toString(36).substring(2, 8);
-    const filePath = `dishes/${Date.now()}-${randomHash}.${fileExt}`;
+    const adminPasscode = typeof window !== 'undefined' ? (localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026') : 'namahaa2026';
 
-    // 1. First attempt upload to 'food-images' bucket
-    let { error: uploadError } = await supabase.storage
-      .from('food-images')
-      .upload(filePath, fileOrBlob, {
-        cacheControl: '3600',
-        upsert: true,
-        contentType: fileOrBlob.type || 'image/jpeg',
+    // 1. File or Blob upload (multipart/form-data)
+    if (fileOrBlobOrUrl instanceof File || fileOrBlobOrUrl instanceof Blob) {
+      const formData = new FormData();
+      formData.append('file', fileOrBlobOrUrl);
+      if (customFilename) {
+        formData.append('filename', customFilename);
+      }
+
+      const res = await fetch('/api/admin/upload-image', {
+        method: 'POST',
+        headers: {
+          'x-admin-passcode': adminPasscode,
+        },
+        body: formData,
       });
 
-    // 2. If bucket is not found, attempt to auto-create 'food-images' public bucket
-    if (uploadError && (uploadError.message?.toLowerCase().includes('bucket not found') || (uploadError as any).statusCode === 404)) {
-      try {
-        await supabase.storage.createBucket('food-images', { public: true });
-        
-        // Retry upload after creating bucket
-        const retryResult = await supabase.storage
-          .from('food-images')
-          .upload(filePath, fileOrBlob, {
-            cacheControl: '3600',
-            upsert: true,
-            contentType: fileOrBlob.type || 'image/jpeg',
-          });
-
-        uploadError = retryResult.error;
-      } catch (createErr) {
-        console.warn('Auto createBucket notice:', createErr);
+      const data = await res.json();
+      if (data.success && data.publicUrl) {
+        return { publicUrl: data.publicUrl, error: null };
       }
+      return { publicUrl: null, error: new Error(data.error || 'Server upload failed') };
     }
 
-    if (uploadError) {
-      console.error('Supabase storage upload failed:', uploadError);
-      return { publicUrl: null, error: uploadError };
+    // 2. Base64 Data URL or External Image URL (application/json)
+    if (typeof fileOrBlobOrUrl === 'string') {
+      const isDataUrl = fileOrBlobOrUrl.startsWith('data:');
+      const payload = isDataUrl
+        ? { dataUrl: fileOrBlobOrUrl, filename: customFilename }
+        : { imageUrl: fileOrBlobOrUrl, filename: customFilename };
+
+      const res = await fetch('/api/admin/upload-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-passcode': adminPasscode,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (data.success && data.publicUrl) {
+        return { publicUrl: data.publicUrl, error: null };
+      }
+      return { publicUrl: null, error: new Error(data.error || 'Failed to import image to server') };
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from('food-images')
-      .getPublicUrl(filePath);
-
-    if (publicUrlData?.publicUrl) {
-      return { publicUrl: publicUrlData.publicUrl, error: null };
-    }
-
-    return { publicUrl: null, error: new Error('Could not generate public CDN URL') };
-  } catch (err) {
-    console.error('Unexpected error during storage upload:', err);
+    return { publicUrl: null, error: new Error('Unsupported image payload') };
+  } catch (err: any) {
+    console.error('uploadImageViaAdminApi error:', err);
     return { publicUrl: null, error: err as Error };
   }
 }
 
 /**
- * Converts a data URL or external image URL to Blob and uploads it to Supabase Storage ('food-images' bucket).
+ * Deletes a storage image from 'food-menu-images' via the secure Next.js Server API route.
  */
-export async function uploadImageUrlToSupabaseStorage(
-  imageUrl: string
-): Promise<{ publicUrl: string | null; error: Error | null }> {
-  if (!isSupabaseConfigured()) {
-    return { publicUrl: null, error: new Error('Supabase configuration missing.') };
-  }
+export async function deleteImageViaAdminApi(imageUrl: string): Promise<boolean> {
+  if (!imageUrl || !imageUrl.includes(BUCKET_NAME)) return false;
 
   try {
-    let blob: Blob;
+    const adminPasscode = typeof window !== 'undefined' ? (localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026') : 'namahaa2026';
 
-    if (imageUrl.startsWith('data:')) {
-      const res = await fetch(imageUrl);
-      blob = await res.blob();
-    } else {
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image URL: HTTP ${response.status}`);
-      }
-      blob = await response.blob();
-    }
+    const res = await fetch('/api/admin/delete-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-passcode': adminPasscode,
+      },
+      body: JSON.stringify({ imageUrl }),
+    });
 
-    return await uploadImageToSupabaseStorage(blob);
+    const data = await res.json();
+    return Boolean(data.success);
   } catch (err) {
-    console.error('Failed to convert/upload image URL to Supabase:', err);
-    return { publicUrl: null, error: err as Error };
+    console.error('deleteImageViaAdminApi error:', err);
+    return false;
   }
 }
 
@@ -121,14 +117,14 @@ export async function uploadImageUrlToSupabaseStorage(
  */
 export async function ensureCloudUrl(url: string): Promise<string> {
   if (!url || typeof url !== 'string') return '';
-  // Remote HTTP/HTTPS URLs pass through
+  // Remote HTTP/HTTPS URLs pass through directly
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  // Local base64 data URLs get uploaded to Supabase Storage bucket
+  // Local base64 data URLs get uploaded to Supabase Storage bucket via secure server API
   if (url.startsWith('data:')) {
     try {
-      const { publicUrl } = await uploadImageUrlToSupabaseStorage(url);
+      const { publicUrl } = await uploadImageViaAdminApi(url);
       return publicUrl || url;
     } catch (err) {
       console.error('ensureCloudUrl error:', err);

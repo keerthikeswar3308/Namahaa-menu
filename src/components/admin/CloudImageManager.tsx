@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Category, MenuItem } from '@/types';
 import { ImagePicker } from './ImagePicker';
 import { Cloud, Upload, Link as LinkIcon, Search, Check, Save, Image as ImageIcon, Sparkles, RefreshCw, Layers, ShieldCheck } from 'lucide-react';
-import { isSupabaseConfigured, uploadImageToSupabaseStorage, uploadImageUrlToSupabaseStorage } from '@/lib/supabase';
+import { isSupabaseConfigured, uploadImageViaAdminApi } from '@/lib/supabase';
 import { compressImageFile } from '@/lib/imageUtils';
 
 interface CloudImageManagerProps {

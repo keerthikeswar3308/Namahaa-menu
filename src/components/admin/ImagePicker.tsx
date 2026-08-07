@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { GalleryImage } from '@/types';
 import { Upload, Link as LinkIcon, Images, Check, Image as ImageIcon, FileImage, Sparkles, Cloud, CloudUpload, AlertCircle } from 'lucide-react';
-import { isSupabaseConfigured, uploadImageToSupabaseStorage, uploadImageUrlToSupabaseStorage } from '@/lib/supabase';
+import { isSupabaseConfigured, uploadImageViaAdminApi } from '@/lib/supabase';
 import { compressImageFile } from '@/lib/imageUtils';
 
 interface ImagePickerProps {
@@ -52,28 +52,21 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
       onChangeUrl(compressedDataUrl);
       setUrlInput(compressedDataUrl);
 
-      // 2. Upload lightweight compressed Blob to Supabase Cloud Storage bucket 'food-images'
-      if (isSupabaseConfigured()) {
-        const res = await fetch(compressedDataUrl);
-        const compressedBlob = await res.blob();
-        const { publicUrl, error } = await uploadImageToSupabaseStorage(compressedBlob, file.name);
-        if (publicUrl) {
-          onChangeUrl(publicUrl);
-          setUrlInput(publicUrl);
-          setUploadStatusMsg({
-            type: 'success',
-            text: 'Image saved in Supabase Cloud Storage (food-images)!',
-          });
-        } else if (error) {
-          setUploadStatusMsg({
-            type: 'info',
-            text: `Compressed copy ready (Cloud Notice: ${error.message})`,
-          });
-        }
-      } else {
+      // 2. Upload lightweight compressed Blob to Supabase Storage via server API
+      const res = await fetch(compressedDataUrl);
+      const compressedBlob = await res.blob();
+      const { publicUrl, error } = await uploadImageViaAdminApi(compressedBlob, file.name);
+      if (publicUrl) {
+        onChangeUrl(publicUrl);
+        setUrlInput(publicUrl);
         setUploadStatusMsg({
           type: 'success',
-          text: 'Compressed image ready for menu linking!',
+          text: 'Image saved in Supabase Storage (food-menu-images)!',
+        });
+      } else if (error) {
+        setUploadStatusMsg({
+          type: 'info',
+          text: `Compressed copy ready (Notice: ${error.message})`,
         });
       }
     } catch (error) {
@@ -87,28 +80,23 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
   const handleSaveUrlToCloud = async () => {
     if (!urlInput.trim()) return;
     setIsUploading(true);
-    setUploadStatusMsg({ type: 'info', text: 'Saving URL to Supabase Cloud Storage...' });
+    setUploadStatusMsg({ type: 'info', text: 'Saving URL to Supabase Storage...' });
 
     try {
-      if (isSupabaseConfigured()) {
-        const { publicUrl, error } = await uploadImageUrlToSupabaseStorage(urlInput);
-        if (publicUrl) {
-          onChangeUrl(publicUrl);
-          setUrlInput(publicUrl);
-          setUploadStatusMsg({
-            type: 'success',
-            text: 'External URL saved into Supabase Cloud Storage CDN!',
-          });
-        } else {
-          onChangeUrl(urlInput);
-          setUploadStatusMsg({
-            type: 'info',
-            text: `URL set. (Supabase cloud transfer notice: ${error?.message || 'kept direct link'})`,
-          });
-        }
+      const { publicUrl, error } = await uploadImageViaAdminApi(urlInput.trim());
+      if (publicUrl) {
+        onChangeUrl(publicUrl);
+        setUrlInput(publicUrl);
+        setUploadStatusMsg({
+          type: 'success',
+          text: 'External URL saved into Supabase Storage CDN!',
+        });
       } else {
         onChangeUrl(urlInput);
-        setUploadStatusMsg({ type: 'success', text: 'Image URL updated successfully!' });
+        setUploadStatusMsg({
+          type: 'info',
+          text: `URL set. (Notice: ${error?.message || 'kept direct link'})`,
+        });
       }
     } catch (err) {
       console.error('URL save error:', err);

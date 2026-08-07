@@ -19,7 +19,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { isSupabaseConfigured, uploadImageToSupabaseStorage, uploadImageUrlToSupabaseStorage } from '@/lib/supabase';
+import { isSupabaseConfigured, uploadImageViaAdminApi } from '@/lib/supabase';
 import { compressImageFile, compressImageToBlob, isValidImageUrl, getFreshImageUrl } from '@/lib/imageUtils';
 
 interface ItemImagePickerProps {
@@ -120,17 +120,17 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     setStatus('info', 'Compressing & uploading image to Supabase Storage...');
 
     try {
-      // Compress client-side
+      // Compress client-side for rapid transmission
       const compressedBlob = await compressImageToBlob(file, 900, 900, 0.8);
       
-      const { publicUrl, error } = await uploadImageToSupabaseStorage(compressedBlob, file.name);
+      const { publicUrl, error } = await uploadImageViaAdminApi(compressedBlob, file.name);
       if (publicUrl) {
         const freshUrl = getFreshImageUrl(publicUrl);
         onChangeUrl(freshUrl);
-        setStatus('success', 'Image uploaded & saved directly in Supabase Cloud Storage (food-images)! Visible to all devices!');
+        setStatus('success', 'Image uploaded & saved directly in Supabase Storage (food-menu-images)! Visible to all devices!');
       } else {
-        console.error('Supabase Storage Error:', error);
-        setStatus('error', `Upload Failed: ${error?.message || 'Storage upload error'}`);
+        console.error('Server Upload Error:', error);
+        setStatus('error', `Upload Failed: ${error?.message || 'Server storage upload error'}`);
       }
     } catch (err) {
       console.error('File upload error:', err);
@@ -205,24 +205,16 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       setIsUploading(true);
-      setStatus('info', 'Uploading captured dish photo to Supabase...');
+      setStatus('info', 'Uploading captured dish photo to Supabase Storage (food-menu-images)...');
 
       try {
-        if (isSupabaseConfigured()) {
-          const { publicUrl, error } = await uploadImageToSupabaseStorage(blob, `camera-${Date.now()}.jpg`);
-          if (publicUrl) {
-            const freshUrl = getFreshImageUrl(publicUrl);
-            onChangeUrl(freshUrl);
-            setStatus('success', 'Captured dish photo uploaded to Supabase Storage!');
-          } else {
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            onChangeUrl(dataUrl);
-            setStatus('info', `Saved photo. (${error?.message})`);
-          }
+        const { publicUrl, error } = await uploadImageViaAdminApi(blob, `camera-${Date.now()}.jpg`);
+        if (publicUrl) {
+          const freshUrl = getFreshImageUrl(publicUrl);
+          onChangeUrl(freshUrl);
+          setStatus('success', 'Captured dish photo uploaded to Supabase Storage (food-menu-images)!');
         } else {
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          onChangeUrl(dataUrl);
-          setStatus('success', 'Photo captured successfully!');
+          setStatus('error', `Camera Upload Failed: ${error?.message || 'Could not upload photo'}`);
         }
       } catch (err) {
         setStatus('error', 'Failed to save camera snapshot.');
@@ -247,27 +239,20 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     }
 
     setIsUploading(true);
-    setStatus('info', 'Downloading external image & saving to Supabase Storage (food-images)...');
+    setStatus('info', 'Server downloading external image & saving to Supabase Storage (food-menu-images)...');
 
     try {
-      if (isSupabaseConfigured()) {
-        const { publicUrl, error } = await uploadImageUrlToSupabaseStorage(urlInput.trim());
-        if (publicUrl) {
-          const freshUrl = getFreshImageUrl(publicUrl);
-          onChangeUrl(freshUrl);
-          setStatus('success', 'External image URL imported & stored permanently in Supabase CDN!');
-          setUrlInput('');
-        } else {
-          onChangeUrl(urlInput.trim());
-          setStatus('info', `Linked direct image URL. (${error?.message || 'fallback'})`);
-        }
+      const { publicUrl, error } = await uploadImageViaAdminApi(urlInput.trim(), `url-${Date.now()}.jpg`);
+      if (publicUrl) {
+        const freshUrl = getFreshImageUrl(publicUrl);
+        onChangeUrl(freshUrl);
+        setStatus('success', 'External image URL imported & stored permanently in Supabase Storage!');
+        setUrlInput('');
       } else {
-        onChangeUrl(urlInput.trim());
-        setStatus('success', 'Image URL linked successfully!');
+        setStatus('error', `URL Import Failed: ${error?.message || 'Could not import image'}`);
       }
-    } catch (err) {
-      onChangeUrl(urlInput.trim());
-      setStatus('info', 'Direct image URL set.');
+    } catch (err: any) {
+      setStatus('error', err.message || 'Direct image URL import failed.');
     } finally {
       setIsUploading(false);
       setUrlValidating(false);
@@ -300,26 +285,19 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
 
   const handleSelectSearchResult = async (item: { name: string; url: string }) => {
     setIsUploading(true);
-    setStatus('info', `Importing "${item.name}" into Supabase Storage...`);
+    setStatus('info', `Server downloading & importing "${item.name}" into Supabase Storage (food-menu-images)...`);
 
     try {
-      if (isSupabaseConfigured()) {
-        const { publicUrl, error } = await uploadImageUrlToSupabaseStorage(item.url);
-        if (publicUrl) {
-          const freshUrl = getFreshImageUrl(publicUrl);
-          onChangeUrl(freshUrl);
-          setStatus('success', `Imported "${item.name}" directly to Supabase Storage!`);
-        } else {
-          onChangeUrl(item.url);
-          setStatus('info', `Selected "${item.name}".`);
-        }
+      const { publicUrl, error } = await uploadImageViaAdminApi(item.url, `${item.name.replace(/\s+/g, '-').toLowerCase()}.jpg`);
+      if (publicUrl) {
+        const freshUrl = getFreshImageUrl(publicUrl);
+        onChangeUrl(freshUrl);
+        setStatus('success', `Imported "${item.name}" directly to Supabase Storage (food-menu-images)!`);
       } else {
-        onChangeUrl(item.url);
-        setStatus('success', `Selected "${item.name}".`);
+        setStatus('error', `Search Import Failed: ${error?.message || 'Could not import food photo'}`);
       }
-    } catch (err) {
-      onChangeUrl(item.url);
-      setStatus('info', `Selected "${item.name}".`);
+    } catch (err: any) {
+      setStatus('error', err.message || `Failed to import "${item.name}".`);
     } finally {
       setIsUploading(false);
     }
