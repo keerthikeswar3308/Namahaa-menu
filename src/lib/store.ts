@@ -166,9 +166,32 @@ export class NamahaStore {
     this.setMenuItems(updated);
     notifyStoreUpdated();
 
+    // 1. Superuser server route for instant DB persistence
+    try {
+      const adminPasscode =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026'
+          : 'namahaa2026';
+
+      await fetch('/api/admin/sync-menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-passcode': adminPasscode,
+        },
+        body: JSON.stringify({
+          items: [newItem],
+          categories: this.getCategories(),
+          mode: 'merge',
+        }),
+      });
+    } catch (apiErr) {
+      console.warn('Server sync notice for addMenuItem:', apiErr);
+    }
+
+    // 2. Client fallback
     if (isSupabaseConfigured()) {
       try {
-        // Ensure category exists first to satisfy foreign key constraint!
         if (newItem.categoryId && newItem.categoryName) {
           await supabase.from('categories').upsert({
             id: newItem.categoryId,
@@ -233,6 +256,30 @@ export class NamahaStore {
     this.setMenuItems(items);
     notifyStoreUpdated();
 
+    // 1. Superuser server route for instant DB persistence
+    try {
+      const adminPasscode =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026'
+          : 'namahaa2026';
+
+      await fetch('/api/admin/sync-menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-passcode': adminPasscode,
+        },
+        body: JSON.stringify({
+          items: [updatedItem],
+          categories: this.getCategories(),
+          mode: 'merge',
+        }),
+      });
+    } catch (apiErr) {
+      console.warn('Server sync notice for updateMenuItem:', apiErr);
+    }
+
+    // 2. Client fallback
     if (isSupabaseConfigured()) {
       try {
         if (updatedItem.categoryId && updatedItem.categoryName) {
