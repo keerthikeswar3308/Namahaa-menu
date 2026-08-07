@@ -37,16 +37,11 @@ export default function HomePage() {
     setRestaurantInfo(NamahaStore.getRestaurantInfo());
     setGalleryImages(NamahaStore.getGallery());
 
-    Promise.all([
-      NamahaStore.syncMenuItemsFromSupabase(),
-      NamahaStore.syncCategoriesFromSupabase(),
-      NamahaStore.syncRestaurantInfoFromSupabase(),
-      NamahaStore.syncGalleryFromSupabase(),
-    ]).then(([syncedItems, syncedCats, syncedInfo, syncedGallery]) => {
-      if (syncedItems && syncedItems.length > 0) setMenuItems(syncedItems);
-      if (syncedCats && syncedCats.length > 0) setCategories(syncedCats);
-      if (syncedInfo) setRestaurantInfo(syncedInfo);
-      if (syncedGallery && syncedGallery.length > 0) setGalleryImages(syncedGallery);
+    NamahaStore.syncAllFromSupabase().then((data) => {
+      if (data.items && data.items.length > 0) setMenuItems(data.items);
+      if (data.categories && data.categories.length > 0) setCategories(data.categories);
+      if (data.restaurantInfo) setRestaurantInfo(data.restaurantInfo);
+      if (data.gallery && data.gallery.length > 0) setGalleryImages(data.gallery);
     });
   };
 

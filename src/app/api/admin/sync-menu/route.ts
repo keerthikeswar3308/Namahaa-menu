@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
-import { Category, MenuItem } from '@/types';
+import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const VALID_PASSCODES = ['namahaa2026', 'admin', 'namahaa'];
 
@@ -26,13 +29,38 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { items, categories, mode } = body as {
+    const {
+      items,
+      categories,
+      restaurantInfo,
+      gallery,
+      mode,
+      deleteItemId,
+      deleteCategoryId,
+      deleteGalleryId,
+    } = body as {
       items?: MenuItem[];
       categories?: Category[];
+      restaurantInfo?: Partial<RestaurantInfo>;
+      gallery?: GalleryImage[];
       mode?: 'replace' | 'merge';
+      deleteItemId?: string;
+      deleteCategoryId?: string;
+      deleteGalleryId?: string;
     };
 
-    // 1. Sync Categories first to satisfy Foreign Key constraints
+    // 1. Delete specific records if requested
+    if (deleteItemId) {
+      await supabaseAdmin.from('menu_items').delete().eq('id', deleteItemId);
+    }
+    if (deleteCategoryId) {
+      await supabaseAdmin.from('categories').delete().eq('id', deleteCategoryId);
+    }
+    if (deleteGalleryId) {
+      await supabaseAdmin.from('gallery').delete().eq('id', deleteGalleryId);
+    }
+
+    // 2. Sync Categories (Categories must be saved before items for Foreign Key validity)
     if (categories && categories.length > 0) {
       const catPayload = categories.map((c, idx) => ({
         id: c.id,
@@ -52,10 +80,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Sync Menu Items
+    // 3. Sync Menu Items
     if (items && items.length > 0) {
       if (mode === 'replace') {
-        // Delete items that are no longer in this new menu
         const { data: existingRows } = await supabaseAdmin
           .from('menu_items')
           .select('id');
@@ -68,7 +95,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Upsert in chunked batches of 25 to avoid any payload limits
       const batchSize = 25;
       for (let i = 0; i < items.length; i += batchSize) {
         const batch = items.slice(i, i + batchSize);
@@ -106,10 +132,59 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 4. Sync Restaurant Info
+    if (restaurantInfo) {
+      const { error: infoError } = await supabaseAdmin
+        .from('restaurant_info')
+        .upsert({
+          id: 1,
+          name: restaurantInfo.name,
+          tagline: restaurantInfo.tagline,
+          description: restaurantInfo.description,
+          logo_url: restaurantInfo.logoUrl,
+          banner_url: restaurantInfo.bannerUrl,
+          phone: restaurantInfo.phone,
+          email: restaurantInfo.email,
+          address: restaurantInfo.address,
+          google_maps_url: restaurantInfo.googleMapsUrl,
+          instagram_url: restaurantInfo.instagramUrl,
+          facebook_url: restaurantInfo.facebookUrl,
+          opening_hours: restaurantInfo.openingHours,
+          hero_title: restaurantInfo.heroTitle,
+          hero_subtitle: restaurantInfo.heroSubtitle,
+          announcement_text: restaurantInfo.announcementText,
+          is_restaurant_open: restaurantInfo.isRestaurantOpen,
+          copyright_text: restaurantInfo.copyrightText,
+        });
+
+      if (infoError) {
+        console.error('Server restaurant info sync error:', infoError);
+      }
+    }
+
+    // 5. Sync Gallery
+    if (gallery && gallery.length > 0) {
+      const galPayload = gallery.map((g) => ({
+        id: g.id,
+        url: g.url,
+        title: g.title,
+        category: g.category,
+        is_enabled: g.isEnabled !== false,
+      }));
+
+      const { error: galError } = await supabaseAdmin
+        .from('gallery')
+        .upsert(galPayload);
+
+      if (galError) {
+        console.error('Server gallery sync error:', galError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Successfully synchronized ${items?.length || 0} items and ${categories?.length || 0} categories to Supabase database!`,
-      itemCount: items?.length || 0,
+      message: 'Data successfully synchronized with Supabase database',
+      timestamp: Date.now(),
     });
   } catch (err: any) {
     console.error('API /api/admin/sync-menu exception:', err);

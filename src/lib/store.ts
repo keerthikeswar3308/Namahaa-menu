@@ -38,7 +38,148 @@ function notifyStoreUpdated(): void {
   window.dispatchEvent(new CustomEvent('namahaa_store_updated'));
 }
 
+function getAdminPasscode(): string {
+  if (typeof window === 'undefined') return 'namahaa2026';
+  return localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026';
+}
+
+async function callAdminSyncApi(payload: Record<string, any>): Promise<boolean> {
+  try {
+    const passcode = getAdminPasscode();
+    const res = await fetch('/api/admin/sync-menu', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-passcode': passcode,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    return Boolean(data.success);
+  } catch (err) {
+    console.warn('callAdminSyncApi notice:', err);
+    return false;
+  }
+}
+
 export class NamahaStore {
+  // ==========================================
+  // 0. UNIVERSAL CROSS-DEVICE SYNC
+  // ==========================================
+  static async syncAllFromSupabase(): Promise<{
+    items: MenuItem[];
+    categories: Category[];
+    restaurantInfo: RestaurantInfo | null;
+    gallery: GalleryImage[];
+  }> {
+    try {
+      const res = await fetch(`/api/menu?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          // 1. Categories
+          if (json.categories && json.categories.length > 0) {
+            const mappedCats: Category[] = json.categories.map((c: any, idx: number) => ({
+              id: c.id,
+              name: c.name,
+              description: c.description || '',
+              image: c.image || '',
+              displayOrder: c.display_order || idx + 1,
+              isEnabled: c.is_enabled !== false,
+            }));
+            this.setCategories(mappedCats);
+          }
+
+          // 2. Menu Items
+          if (json.items && json.items.length > 0) {
+            const mappedItems: MenuItem[] = json.items.map((d: any, idx: number) => ({
+              id: d.id,
+              name: d.name,
+              description: d.description || '',
+              price: Number(d.price),
+              categoryId: d.category_id || `cat-${d.category_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
+              categoryName: d.category_name || '',
+              image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+              isVeg: d.is_veg !== false,
+              preparationTime: d.preparation_time || '10 mins',
+              isAvailable: d.is_available !== false,
+              isPopular: Boolean(d.is_popular),
+              isChefSpecial: Boolean(d.is_chef_special),
+              isTodaySpecial: Boolean(d.is_today_special),
+              ingredients: d.ingredients || [],
+              chefRecommendation: d.chef_recommendation || '',
+              displayOrder: d.display_order || idx + 1,
+            }));
+            this.setMenuItems(mappedItems);
+          }
+
+          // 3. Restaurant Info
+          if (json.restaurantInfo) {
+            const d = json.restaurantInfo;
+            const mappedInfo: RestaurantInfo = {
+              name: d.name || defaultRestaurantInfo.name,
+              tagline: d.tagline || defaultRestaurantInfo.tagline,
+              description: d.description || defaultRestaurantInfo.description,
+              logoUrl: d.logo_url || defaultRestaurantInfo.logoUrl,
+              bannerUrl: d.banner_url || defaultRestaurantInfo.bannerUrl,
+              phone: d.phone || defaultRestaurantInfo.phone,
+              email: d.email || defaultRestaurantInfo.email,
+              address: d.address || defaultRestaurantInfo.address,
+              googleMapsUrl: d.google_maps_url || defaultRestaurantInfo.googleMapsUrl,
+              instagramUrl: d.instagram_url || defaultRestaurantInfo.instagramUrl,
+              facebookUrl: d.facebook_url || defaultRestaurantInfo.facebookUrl,
+              openingHours: d.opening_hours || defaultRestaurantInfo.openingHours,
+              heroTitle: d.hero_title || defaultRestaurantInfo.heroTitle,
+              heroSubtitle: d.hero_subtitle || defaultRestaurantInfo.heroSubtitle,
+              announcementText: d.announcement_text || defaultRestaurantInfo.announcementText,
+              isRestaurantOpen: d.is_restaurant_open ?? true,
+              copyrightText: d.copyright_text || defaultRestaurantInfo.copyrightText,
+              themePrimaryColor: '#023835',
+              themeGoldColor: '#E6A12A',
+            };
+            setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, mappedInfo);
+          }
+
+          // 4. Gallery
+          if (json.gallery && json.gallery.length > 0) {
+            const mappedGal: GalleryImage[] = json.gallery.map((g: any) => ({
+              id: g.id,
+              url: g.url,
+              title: g.title,
+              category: g.category,
+              isEnabled: g.is_enabled ?? true,
+            }));
+            this.setGallery(mappedGal);
+          }
+
+          notifyStoreUpdated();
+          return {
+            items: this.getMenuItems(),
+            categories: this.getCategories(),
+            restaurantInfo: this.getRestaurantInfo(),
+            gallery: this.getGallery(),
+          };
+        }
+      }
+    } catch (apiErr) {
+      console.warn('syncAllFromSupabase exception:', apiErr);
+    }
+
+    return {
+      items: this.getMenuItems(),
+      categories: this.getCategories(),
+      restaurantInfo: this.getRestaurantInfo(),
+      gallery: this.getGallery(),
+    };
+  }
+
   // ==========================================
   // 1. MENU ITEMS CRUD (SUPABASE + LOCAL CACHE)
   // ==========================================
@@ -51,106 +192,8 @@ export class NamahaStore {
   }
 
   static async syncMenuItemsFromSupabase(): Promise<MenuItem[]> {
-    try {
-      // 1. Primary: Universal server endpoint (bypasses all browser RLS policies)
-      const res = await fetch('/api/menu', { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.items && json.items.length > 0) {
-          const cats: Category[] = json.categories || [];
-          if (cats.length > 0) {
-            this.setCategories(
-              cats.map((c: any, idx: number) => ({
-                id: c.id,
-                name: c.name,
-                description: c.description || '',
-                image: c.image || '',
-                displayOrder: c.display_order || idx + 1,
-                isEnabled: c.is_enabled !== false,
-              }))
-            );
-          }
-
-          const mapped: MenuItem[] = json.items.map((d: any, idx: number) => ({
-            id: d.id,
-            name: d.name,
-            description: d.description || '',
-            price: Number(d.price),
-            categoryId: d.category_id || `cat-${d.category_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
-            categoryName: d.category_name || '',
-            image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-            isVeg: d.is_veg !== false,
-            preparationTime: d.preparation_time || '10 mins',
-            isAvailable: d.is_available !== false,
-            isPopular: Boolean(d.is_popular),
-            isChefSpecial: Boolean(d.is_chef_special),
-            isTodaySpecial: Boolean(d.is_today_special),
-            ingredients: d.ingredients || [],
-            chefRecommendation: d.chef_recommendation || '',
-            displayOrder: d.display_order || idx + 1,
-          }));
-
-          this.setMenuItems(mapped);
-          return mapped;
-        }
-      }
-    } catch (apiErr) {
-      console.warn('/api/menu notice, falling back to direct Supabase:', apiErr);
-    }
-
-    if (!isSupabaseConfigured()) return this.getMenuItems();
-    try {
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .order('display_order', { ascending: true });
-
-      if (error) {
-        console.warn('Supabase menu items fetch notice:', error);
-        return this.getMenuItems();
-      }
-
-      if (data && data.length > 0) {
-        const existingCats = this.getCategories();
-
-        const mappedItems: MenuItem[] = data.map((d, idx) => {
-          let catId = d.category_id || '';
-          const catName = d.category_name || '';
-
-          if (catName && existingCats.length > 0) {
-            const match = existingCats.find((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase());
-            if (match) {
-              catId = match.id;
-            }
-          }
-
-          return {
-            id: d.id,
-            name: d.name,
-            description: d.description || '',
-            price: Number(d.price),
-            categoryId: catId || `cat-${catName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
-            categoryName: catName,
-            image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-            isVeg: d.is_veg !== false,
-            preparationTime: d.preparation_time || '10 mins',
-            isAvailable: d.is_available !== false,
-            isPopular: Boolean(d.is_popular),
-            isChefSpecial: Boolean(d.is_chef_special),
-            isTodaySpecial: Boolean(d.is_today_special),
-            ingredients: d.ingredients || [],
-            chefRecommendation: d.chef_recommendation || '',
-            displayOrder: d.display_order || (idx + 1),
-          };
-        });
-
-        this.setMenuItems(mappedItems);
-        return mappedItems;
-      }
-    } catch (e) {
-      console.error('Error syncing menu items from Supabase:', e);
-    }
-    return this.getMenuItems();
+    const data = await this.syncAllFromSupabase();
+    return data.items;
   }
 
   static async addMenuItem(item: Omit<MenuItem, 'id'>): Promise<MenuItem> {
@@ -166,67 +209,12 @@ export class NamahaStore {
     this.setMenuItems(updated);
     notifyStoreUpdated();
 
-    // 1. Superuser server route for instant DB persistence
-    try {
-      const adminPasscode =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026'
-          : 'namahaa2026';
-
-      await fetch('/api/admin/sync-menu', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-passcode': adminPasscode,
-        },
-        body: JSON.stringify({
-          items: [newItem],
-          categories: this.getCategories(),
-          mode: 'merge',
-        }),
-      });
-    } catch (apiErr) {
-      console.warn('Server sync notice for addMenuItem:', apiErr);
-    }
-
-    // 2. Client fallback
-    if (isSupabaseConfigured()) {
-      try {
-        if (newItem.categoryId && newItem.categoryName) {
-          await supabase.from('categories').upsert({
-            id: newItem.categoryId,
-            name: newItem.categoryName,
-            display_order: 1,
-            is_enabled: true,
-          });
-        }
-
-        const { error } = await supabase.from('menu_items').upsert({
-          id: newItem.id,
-          name: newItem.name,
-          description: newItem.description || '',
-          price: newItem.price,
-          category_id: newItem.categoryId,
-          category_name: newItem.categoryName,
-          image: newItem.image,
-          image_url: newItem.image,
-          is_veg: newItem.isVeg !== false,
-          preparation_time: newItem.preparationTime || '10 mins',
-          is_available: newItem.isAvailable !== false,
-          is_popular: Boolean(newItem.isPopular),
-          is_chef_special: Boolean(newItem.isChefSpecial),
-          is_today_special: Boolean(newItem.isTodaySpecial),
-          ingredients: newItem.ingredients || [],
-          chef_recommendation: newItem.chefRecommendation || '',
-          display_order: newItem.displayOrder || 1,
-        });
-
-        if (error) console.error('Supabase add item error:', error);
-        else notifyStoreUpdated();
-      } catch (err) {
-        console.error('addMenuItem exception:', err);
-      }
-    }
+    // Persist via Server API Route
+    await callAdminSyncApi({
+      items: [newItem],
+      categories: this.getCategories(),
+      mode: 'merge',
+    });
 
     // Cross-sync with Gallery if matching title exists
     this.crossSyncMenuToGallery(newItem.name, newItem.image);
@@ -251,72 +239,16 @@ export class NamahaStore {
       displayOrder: updates.displayOrder !== undefined ? updates.displayOrder : (items[index].displayOrder || (index + 1)),
     };
 
-    // Preserve exact index in the array so order NEVER changes
     items[index] = updatedItem;
     this.setMenuItems(items);
     notifyStoreUpdated();
 
-    // 1. Superuser server route for instant DB persistence
-    try {
-      const adminPasscode =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026'
-          : 'namahaa2026';
-
-      await fetch('/api/admin/sync-menu', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-passcode': adminPasscode,
-        },
-        body: JSON.stringify({
-          items: [updatedItem],
-          categories: this.getCategories(),
-          mode: 'merge',
-        }),
-      });
-    } catch (apiErr) {
-      console.warn('Server sync notice for updateMenuItem:', apiErr);
-    }
-
-    // 2. Client fallback
-    if (isSupabaseConfigured()) {
-      try {
-        if (updatedItem.categoryId && updatedItem.categoryName) {
-          await supabase.from('categories').upsert({
-            id: updatedItem.categoryId,
-            name: updatedItem.categoryName,
-            display_order: 1,
-            is_enabled: true,
-          });
-        }
-
-        const { error } = await supabase.from('menu_items').upsert({
-          id: updatedItem.id,
-          name: updatedItem.name,
-          description: updatedItem.description || '',
-          price: updatedItem.price,
-          category_id: updatedItem.categoryId,
-          category_name: updatedItem.categoryName,
-          image: updatedItem.image,
-          image_url: updatedItem.image,
-          is_veg: updatedItem.isVeg !== false,
-          preparation_time: updatedItem.preparationTime || '10 mins',
-          is_available: updatedItem.isAvailable !== false,
-          is_popular: Boolean(updatedItem.isPopular),
-          is_chef_special: Boolean(updatedItem.isChefSpecial),
-          is_today_special: Boolean(updatedItem.isTodaySpecial),
-          ingredients: updatedItem.ingredients || [],
-          chef_recommendation: updatedItem.chefRecommendation || '',
-          display_order: updatedItem.displayOrder || 1,
-        });
-
-        if (error) console.error('Supabase update item error:', error);
-        else notifyStoreUpdated();
-      } catch (err) {
-        console.error('updateMenuItem exception:', err);
-      }
-    }
+    // Persist via Server API Route
+    await callAdminSyncApi({
+      items: [updatedItem],
+      categories: this.getCategories(),
+      mode: 'merge',
+    });
 
     // Cross-sync with Gallery if image changed
     if (updatedItem.image) {
@@ -338,6 +270,11 @@ export class NamahaStore {
       deleteImageViaAdminApi(itemToDelete.image);
     }
 
+    // Persist via Server API Route
+    callAdminSyncApi({
+      deleteItemId: id,
+    });
+
     if (isSupabaseConfigured()) {
       supabase.from('menu_items').delete().eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase delete item error:', error);
@@ -351,16 +288,20 @@ export class NamahaStore {
     this.setMenuItems(initialMenuItems);
     this.setCategories(initialCategories);
     notifyStoreUpdated();
+    callAdminSyncApi({
+      items: initialMenuItems,
+      categories: initialCategories,
+      mode: 'replace',
+    });
   }
 
   static clearAllMenuItems(): void {
     this.setMenuItems([]);
     notifyStoreUpdated();
-    if (isSupabaseConfigured()) {
-      supabase.from('menu_items').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(({ error }) => {
-        if (error) console.error('Supabase clear items error:', error);
-      });
-    }
+    callAdminSyncApi({
+      items: [],
+      mode: 'replace',
+    });
   }
 
   static async replaceAllMenuItems(newItems: MenuItem[], newCategories?: Category[]): Promise<boolean> {
@@ -370,84 +311,14 @@ export class NamahaStore {
     this.setMenuItems(newItems);
     notifyStoreUpdated();
 
-    try {
-      const adminPasscode =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026'
-          : 'namahaa2026';
+    // Persist via Server API Route
+    const success = await callAdminSyncApi({
+      items: newItems,
+      categories: newCategories || this.getCategories(),
+      mode: 'replace',
+    });
 
-      // 1. Primary: Server API route (uses SUPABASE_SERVICE_ROLE_KEY to bypass all RLS)
-      const res = await fetch('/api/admin/sync-menu', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-passcode': adminPasscode,
-        },
-        body: JSON.stringify({
-          items: newItems,
-          categories: newCategories || this.getCategories(),
-          mode: 'replace',
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        console.log('Server menu sync success:', data.message);
-        notifyStoreUpdated();
-        return true;
-      }
-    } catch (err) {
-      console.warn('Server sync route notice, falling back to direct client:', err);
-    }
-
-    // 2. Client fallback
-    if (isSupabaseConfigured()) {
-      try {
-        if (newCategories && newCategories.length > 0) {
-          await supabase.from('categories').upsert(
-            newCategories.map((c) => ({
-              id: c.id,
-              name: c.name,
-              description: c.description || '',
-              image: c.image || '',
-              display_order: c.displayOrder || 1,
-              is_enabled: c.isEnabled !== false,
-            }))
-          );
-        }
-
-        const batchSize = 25;
-        for (let i = 0; i < newItems.length; i += batchSize) {
-          const batch = newItems.slice(i, i + batchSize);
-          const payload = batch.map((item) => ({
-            id: item.id,
-            name: item.name,
-            description: item.description || '',
-            price: item.price,
-            category_id: item.categoryId,
-            category_name: item.categoryName,
-            image: item.image,
-            image_url: item.image,
-            is_veg: item.isVeg !== false,
-            preparation_time: item.preparationTime || '10 mins',
-            is_available: item.isAvailable !== false,
-            is_popular: Boolean(item.isPopular),
-            is_chef_special: Boolean(item.isChefSpecial),
-            is_today_special: Boolean(item.isTodaySpecial),
-            ingredients: item.ingredients || [],
-            chef_recommendation: item.chefRecommendation || '',
-            display_order: item.displayOrder || 1,
-          }));
-
-          await supabase.from('menu_items').upsert(payload);
-        }
-        notifyStoreUpdated();
-        return true;
-      } catch (err) {
-        console.error('replaceAllMenuItems client error:', err);
-      }
-    }
-    return true;
+    return success;
   }
 
   // ==========================================
@@ -462,30 +333,8 @@ export class NamahaStore {
   }
 
   static async syncCategoriesFromSupabase(): Promise<Category[]> {
-    if (!isSupabaseConfigured()) return this.getCategories();
-    try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('display_order', { ascending: true });
-
-      if (error || !data) return this.getCategories();
-
-      const mapped: Category[] = data.map((c, idx) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description || '',
-        image: c.image || '',
-        displayOrder: c.display_order || idx + 1,
-        isEnabled: c.is_enabled ?? true,
-      }));
-
-      this.setCategories(mapped);
-      return mapped;
-    } catch (e) {
-      console.error('Error syncing categories from Supabase:', e);
-    }
-    return this.getCategories();
+    const data = await this.syncAllFromSupabase();
+    return data.categories;
   }
 
   static addCategory(category: Omit<Category, 'id'>): Category {
@@ -498,18 +347,9 @@ export class NamahaStore {
     this.setCategories(updated);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      supabase.from('categories').insert({
-        id: newCategory.id,
-        name: newCategory.name,
-        description: newCategory.description,
-        image: newCategory.image,
-        display_order: newCategory.displayOrder,
-        is_enabled: newCategory.isEnabled,
-      }).then(({ error }) => {
-        if (error) console.error('Supabase add category error:', error);
-      });
-    }
+    callAdminSyncApi({
+      categories: updated,
+    });
 
     return newCategory;
   }
@@ -523,18 +363,9 @@ export class NamahaStore {
     this.setCategories(categories);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      const dbPayload: Record<string, unknown> = {};
-      if (updates.name !== undefined) dbPayload.name = updates.name;
-      if (updates.description !== undefined) dbPayload.description = updates.description;
-      if (updates.image !== undefined) dbPayload.image = updates.image;
-      if (updates.isEnabled !== undefined) dbPayload.is_enabled = updates.isEnabled;
-      if (updates.displayOrder !== undefined) dbPayload.display_order = updates.displayOrder;
-
-      supabase.from('categories').update(dbPayload).eq('id', id).then(({ error }) => {
-        if (error) console.error('Supabase update category error:', error);
-      });
-    }
+    callAdminSyncApi({
+      categories: [updated],
+    });
 
     return updated;
   }
@@ -545,11 +376,9 @@ export class NamahaStore {
     this.setCategories(filtered);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      supabase.from('categories').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error('Supabase delete category error:', error);
-      });
-    }
+    callAdminSyncApi({
+      deleteCategoryId: id,
+    });
 
     return true;
   }
@@ -562,18 +391,9 @@ export class NamahaStore {
     this.setCategories(updated);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      supabase.from('categories').upsert(updated.map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description || '',
-        image: c.image || '',
-        display_order: c.displayOrder,
-        is_enabled: c.isEnabled !== false,
-      }))).then(({ error }) => {
-        if (error) console.error('Supabase reorder categories error:', error);
-      });
-    }
+    callAdminSyncApi({
+      categories: updated,
+    });
   }
 
   // ==========================================
@@ -584,44 +404,8 @@ export class NamahaStore {
   }
 
   static async syncRestaurantInfoFromSupabase(): Promise<RestaurantInfo> {
-    if (!isSupabaseConfigured()) return this.getRestaurantInfo();
-    try {
-      const { data, error } = await supabase
-        .from('restaurant_info')
-        .select('*')
-        .eq('id', 1)
-        .single();
-
-      if (error || !data) return this.getRestaurantInfo();
-
-      const mapped: RestaurantInfo = {
-        name: data.name,
-        tagline: data.tagline || '',
-        description: data.description || '',
-        logoUrl: data.logo_url || '/logo-circle.svg',
-        bannerUrl: data.banner_url || '/logo-banner.svg',
-        phone: data.phone || '',
-        email: data.email || '',
-        address: data.address || '',
-        googleMapsUrl: data.google_maps_url || '',
-        instagramUrl: data.instagram_url || '',
-        facebookUrl: data.facebook_url || '',
-        openingHours: data.opening_hours || [],
-        heroTitle: data.hero_title || '',
-        heroSubtitle: data.hero_subtitle || '',
-        announcementText: data.announcement_text || '',
-        isRestaurantOpen: data.is_restaurant_open ?? true,
-        copyrightText: data.copyright_text || '',
-        themePrimaryColor: '#023835',
-        themeGoldColor: '#E6A12A',
-      };
-
-      setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, mapped);
-      return mapped;
-    } catch (e) {
-      console.error('Error syncing restaurant info from Supabase:', e);
-    }
-    return this.getRestaurantInfo();
+    const data = await this.syncAllFromSupabase();
+    return data.restaurantInfo || this.getRestaurantInfo();
   }
 
   static updateRestaurantInfo(info: Partial<RestaurantInfo>): RestaurantInfo {
@@ -630,30 +414,9 @@ export class NamahaStore {
     setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, updated);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      supabase.from('restaurant_info').upsert({
-        id: 1,
-        name: updated.name,
-        tagline: updated.tagline,
-        description: updated.description,
-        logo_url: updated.logoUrl,
-        banner_url: updated.bannerUrl,
-        phone: updated.phone,
-        email: updated.email,
-        address: updated.address,
-        google_maps_url: updated.googleMapsUrl,
-        instagram_url: updated.instagramUrl,
-        facebook_url: updated.facebookUrl,
-        opening_hours: updated.openingHours,
-        hero_title: updated.heroTitle,
-        hero_subtitle: updated.heroSubtitle,
-        announcement_text: updated.announcementText,
-        is_restaurant_open: updated.isRestaurantOpen,
-        copyright_text: updated.copyrightText,
-      }).then(({ error }) => {
-        if (error) console.error('Supabase update restaurant info error:', error);
-      });
-    }
+    callAdminSyncApi({
+      restaurantInfo: updated,
+    });
 
     return updated;
   }
@@ -670,33 +433,8 @@ export class NamahaStore {
   }
 
   static async syncGalleryFromSupabase(): Promise<GalleryImage[]> {
-    if (!isSupabaseConfigured()) return this.getGallery();
-    try {
-      const { data, error } = await supabase
-        .from('gallery')
-        .select('*')
-        .order('id', { ascending: true });
-
-      if (error || !data) return this.getGallery();
-
-      const localGallery = this.getGallery();
-
-      const mapped: GalleryImage[] = data.map((g) => ({
-        id: g.id,
-        url: g.url,
-        title: g.title,
-        category: g.category,
-        isEnabled: g.is_enabled ?? true,
-      }));
-
-      if (mapped.length > 0) {
-        this.setGallery(mapped);
-        return mapped;
-      }
-    } catch (e) {
-      console.error('Error syncing gallery from Supabase:', e);
-    }
-    return this.getGallery();
+    const data = await this.syncAllFromSupabase();
+    return data.gallery;
   }
 
   static async addGalleryImage(img: Omit<GalleryImage, 'id'>): Promise<GalleryImage> {
@@ -711,20 +449,10 @@ export class NamahaStore {
     this.setGallery(updated);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      const { error } = await supabase.from('gallery').upsert({
-        id: newImg.id,
-        url: newImg.url,
-        title: newImg.title,
-        category: newImg.category,
-        is_enabled: newImg.isEnabled,
-      });
+    callAdminSyncApi({
+      gallery: [newImg],
+    });
 
-      if (error) console.error('Supabase add gallery image error:', error);
-      else notifyStoreUpdated();
-    }
-
-    // Cross-sync with Menu Items if matching title exists
     this.crossSyncGalleryToMenu(newImg.title, newImg.url);
 
     return newImg;
@@ -749,19 +477,10 @@ export class NamahaStore {
     this.setGallery(gallery);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      const dbPayload: Record<string, unknown> = {};
-      if (finalUrl !== undefined) dbPayload.url = finalUrl;
-      if (updates.title !== undefined) dbPayload.title = updates.title;
-      if (updates.category !== undefined) dbPayload.category = updates.category;
-      if (updates.isEnabled !== undefined) dbPayload.is_enabled = updates.isEnabled;
+    callAdminSyncApi({
+      gallery: [updated],
+    });
 
-      const { error } = await supabase.from('gallery').upsert({ id, ...dbPayload });
-      if (error) console.error('Supabase update gallery image error:', error);
-      else notifyStoreUpdated();
-    }
-
-    // Cross-sync with Menu Items if image URL or title changed
     if (updated.url) {
       this.crossSyncGalleryToMenu(updated.title, updated.url);
     }
@@ -773,19 +492,10 @@ export class NamahaStore {
     this.setGallery(defaultGalleryImages);
     notifyStoreUpdated();
 
-    if (isSupabaseConfigured()) {
-      await supabase.from('gallery').delete().neq('id', 'none');
-      for (const gal of defaultGalleryImages) {
-        await supabase.from('gallery').upsert({
-          id: gal.id,
-          url: gal.url,
-          title: gal.title,
-          category: gal.category,
-          is_enabled: gal.isEnabled,
-        });
-      }
-      notifyStoreUpdated();
-    }
+    callAdminSyncApi({
+      gallery: defaultGalleryImages,
+    });
+
     return defaultGalleryImages;
   }
 
@@ -801,11 +511,9 @@ export class NamahaStore {
       deleteImageViaAdminApi(imgToDelete.url);
     }
 
-    if (isSupabaseConfigured()) {
-      supabase.from('gallery').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error('Supabase delete gallery image error:', error);
-      });
-    }
+    callAdminSyncApi({
+      deleteGalleryId: id,
+    });
 
     return true;
   }
@@ -813,10 +521,6 @@ export class NamahaStore {
   // ==========================================
   // 5. CROSS-TABLE AUTOMATIC SYNCHRONIZATION
   // ==========================================
-  /**
-   * If a Gallery photo is added/updated and matches a Menu Item name,
-   * automatically update the Menu Item's image URL in DB & state.
-   */
   private static crossSyncGalleryToMenu(title: string, imageUrl: string): void {
     if (!title || !imageUrl) return;
     const items = this.getMenuItems();
@@ -826,10 +530,6 @@ export class NamahaStore {
     }
   }
 
-  /**
-   * If a Menu Item image is updated and matches a Gallery photo title,
-   * automatically update the Gallery photo's URL in DB & state.
-   */
   private static crossSyncMenuToGallery(name: string, imageUrl: string): void {
     if (!name || !imageUrl) return;
     const gallery = this.getGallery();
@@ -875,48 +575,21 @@ export class NamahaStore {
   }
 
   static async syncAllMenuItemsToSupabase(): Promise<number> {
-    if (!isSupabaseConfigured()) return 0;
     const items = this.getMenuItems();
     const categories = this.getCategories();
+    const info = this.getRestaurantInfo();
+    const gallery = this.getGallery();
 
-    for (const cat of categories) {
-      await supabase.from('categories').upsert({
-        id: cat.id,
-        name: cat.name,
-        description: cat.description,
-        image: cat.image,
-        display_order: cat.displayOrder,
-        is_enabled: cat.isEnabled,
-      });
-    }
-
-    let count = 0;
-    for (let idx = 0; idx < items.length; idx++) {
-      const item = items[idx];
-      const { error } = await supabase.from('menu_items').upsert({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        price: item.price,
-        category_id: item.categoryId,
-        category_name: item.categoryName,
-        image: item.image,
-        is_veg: item.isVeg,
-        preparation_time: item.preparationTime,
-        is_available: item.isAvailable,
-        is_popular: item.isPopular,
-        is_chef_special: item.isChefSpecial,
-        is_today_special: item.isTodaySpecial,
-        ingredients: item.ingredients,
-        chef_recommendation: item.chefRecommendation,
-        display_order: item.displayOrder || (idx + 1),
-      });
-
-      if (!error) count++;
-    }
+    await callAdminSyncApi({
+      items,
+      categories,
+      restaurantInfo: info,
+      gallery,
+      mode: 'replace',
+    });
 
     notifyStoreUpdated();
-    return count;
+    return items.length;
   }
 
   // ==========================================
@@ -936,7 +609,7 @@ export class NamahaStore {
       channel = supabase
         .channel('namahaa_realtime_db_channel')
         .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-          onUpdate();
+          this.syncAllFromSupabase().then(() => onUpdate());
         })
         .subscribe();
     }
