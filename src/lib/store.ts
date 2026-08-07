@@ -386,6 +386,28 @@ export class NamahaStore {
     return true;
   }
 
+  static reorderCategories(reorderedCategories: Category[]): void {
+    const updated = reorderedCategories.map((c, index) => ({
+      ...c,
+      displayOrder: index + 1,
+    }));
+    this.setCategories(updated);
+    notifyStoreUpdated();
+
+    if (isSupabaseConfigured()) {
+      supabase.from('categories').upsert(updated.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        image: c.image || '',
+        display_order: c.displayOrder,
+        is_enabled: c.isEnabled !== false,
+      }))).then(({ error }) => {
+        if (error) console.error('Supabase reorder categories error:', error);
+      });
+    }
+  }
+
   // ==========================================
   // 3. RESTAURANT INFO (SUPABASE + LOCAL CACHE)
   // ==========================================

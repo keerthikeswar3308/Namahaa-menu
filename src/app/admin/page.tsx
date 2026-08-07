@@ -300,6 +300,10 @@ export default function AdminPage() {
             categories={categories}
             onSaveCategory={handleSaveCategory}
             onDeleteCategory={handleDeleteCategory}
+            onReorderCategories={(reordered) => {
+              NamahaStore.reorderCategories(reordered);
+              setCategories(NamahaStore.getCategories());
+            }}
           />
         )}
 
