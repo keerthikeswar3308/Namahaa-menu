@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Category, GalleryImage, MenuItem } from '@/types';
-import { ImagePicker } from './ImagePicker';
 import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X } from 'lucide-react';
 
 interface MenuManagementProps {
@@ -137,7 +136,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
             Menu Item Management
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            Add, edit food images (via local file, gallery or URL), pricing, descriptions, and stock status.
+            Add & edit menu items, pricing, descriptions, badges, and stock status.
           </p>
         </div>
 
@@ -249,14 +248,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                   ))}
                 </select>
               </div>
-
-              {/* Image Picker Integration */}
-              <ImagePicker
-                label="Food Image Selection"
-                currentUrl={formData.image || ''}
-                onChangeUrl={(url) => setFormData({ ...formData, image: url })}
-                galleryImages={galleryImages}
-              />
 
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">Description</label>

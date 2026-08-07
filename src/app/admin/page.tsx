@@ -10,10 +10,9 @@ import { CategoryManagement } from '@/components/admin/CategoryManagement';
 import { SettingsManagement } from '@/components/admin/SettingsManagement';
 import { GalleryManagement } from '@/components/admin/GalleryManagement';
 import { DocxImporter } from '@/components/admin/DocxImporter';
-import { CloudImageManager } from '@/components/admin/CloudImageManager';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, Cloud } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -162,7 +161,6 @@ export default function AdminPage() {
   const tabs = [
     { id: 'overview', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'menu', label: 'Menu Items', icon: <Utensils className="w-4 h-4" /> },
-    { id: 'images', label: 'Cloud Image Manager', icon: <Cloud className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4" /> },
     { id: 'import', label: 'Import Word Menu', icon: <FileUp className="w-4 h-4" /> },
     { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
@@ -256,14 +254,6 @@ export default function AdminPage() {
             onSaveItem={handleSaveMenuItem}
             onDeleteItem={handleDeleteMenuItem}
             onToggleStatus={handleToggleItemStatus}
-          />
-        )}
-
-        {activeTab === 'images' && (
-          <CloudImageManager
-            items={menuItems}
-            categories={categories}
-            onSaveItem={handleSaveMenuItem}
           />
         )}
 
