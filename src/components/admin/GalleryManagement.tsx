@@ -2,11 +2,13 @@
 
 import React, { useState } from 'react';
 import { GalleryImage } from '@/types';
-import { Camera, Trash2, Edit2, X, Save } from 'lucide-react';
+import { ItemImagePicker } from './ItemImagePicker';
+import { Camera, Plus, Trash2, Edit2, X, Save, Search, Filter } from 'lucide-react';
+import { getFreshImageUrl } from '@/lib/imageUtils';
 
 interface GalleryManagementProps {
   images: GalleryImage[];
-  onSaveImage: (img: GalleryImage) => void;
+  onSaveImage: (img: GalleryImage | Omit<GalleryImage, 'id'>) => void;
   onDeleteImage: (id: string) => void;
   onToggleImage: (id: string, enabled: boolean) => void;
 }
@@ -18,63 +20,138 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
   onToggleImage,
 }) => {
   const [editingImage, setEditingImage] = useState<GalleryImage | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
   const [formData, setFormData] = useState<Partial<GalleryImage>>({
     title: '',
     category: 'Breakfast',
+    url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
     isEnabled: true,
   });
+
+  const handleOpenAdd = () => {
+    setFormData({
+      title: '',
+      category: 'Breakfast',
+      url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+      isEnabled: true,
+    });
+    setEditingImage(null);
+    setIsAdding(true);
+  };
 
   const handleOpenEdit = (img: GalleryImage) => {
     setEditingImage(img);
     setFormData(img);
+    setIsAdding(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingImage || !formData.title) return;
+    if (!formData.title || !formData.url) return;
 
-    onSaveImage({
-      ...editingImage,
-      title: formData.title,
-      category: formData.category || editingImage.category,
-      isEnabled: formData.isEnabled ?? editingImage.isEnabled,
-    });
+    if (editingImage) {
+      onSaveImage({
+        ...editingImage,
+        ...formData,
+      } as GalleryImage);
+    } else {
+      onSaveImage({
+        title: formData.title,
+        category: formData.category || 'Food',
+        url: formData.url,
+        isEnabled: formData.isEnabled ?? true,
+      });
+    }
 
+    setIsAdding(false);
     setEditingImage(null);
   };
+
+  // Get unique categories for filter
+  const categoriesList = Array.from(new Set(images.map((img) => img.category))).filter(Boolean);
+
+  const filteredImages = images.filter((img) => {
+    const matchesSearch =
+      img.title.toLowerCase().includes(search.toLowerCase()) ||
+      img.category.toLowerCase().includes(search.toLowerCase());
+    const matchesCat = categoryFilter === 'all' || img.category === categoryFilter;
+    return matchesSearch && matchesCat;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in text-white">
       
-      {/* Header */}
+      {/* Header Banner */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 rounded-3xl bg-namaha-green-dark border border-namaha-gold/20 shadow-xl">
         <div>
           <h2 className="text-2xl font-serif font-bold text-namaha-gold flex items-center gap-2">
-            <Camera className="w-6 h-6" /> Gallery Management
+            <Camera className="w-6 h-6" /> Restaurant Media Gallery Manager
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            Manage gallery photos, edit title/category details, toggle visibility, or delete gallery photos.
+            Private media library. Upload from device/camera, import via URL, or search food photos into Supabase Storage.
           </p>
         </div>
+
+        <button
+          onClick={handleOpenAdd}
+          className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-bold text-sm shadow-namaha-gold hover:scale-105 transition-transform flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Upload / Add Gallery Photo</span>
+        </button>
       </div>
 
-      {/* Edit Modal */}
-      {editingImage && (
+      {/* Filter & Search Controls */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-namaha-gold absolute left-3.5 top-3.5 z-10" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search gallery photos..."
+            className="w-full pl-10 pr-4 py-2.5 bg-emerald-950/90 border-2 border-namaha-gold/40 rounded-xl text-sm font-medium text-white placeholder-gray-400 focus:outline-none focus:border-namaha-gold shadow-md"
+          />
+        </div>
+
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="w-full sm:w-60 px-4 py-2.5 bg-emerald-950/90 border-2 border-namaha-gold/40 rounded-xl text-sm font-medium text-white focus:outline-none focus:border-namaha-gold shadow-md"
+        >
+          <option value="all">All Gallery Categories ({images.length})</option>
+          {categoriesList.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Add / Edit Modal */}
+      {(isAdding || editingImage) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="w-full max-w-lg bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl p-6 shadow-2xl text-white my-auto">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+          <div className="w-full max-w-xl bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl p-6 shadow-2xl text-white my-auto max-h-[90vh] flex flex-col">
+            
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10 flex-shrink-0">
               <h3 className="text-lg font-serif font-bold text-namaha-gold">
-                Edit Gallery Item: {editingImage.title}
+                {editingImage ? `Edit Photo: ${editingImage.title}` : 'Upload & Add New Gallery Photo'}
               </h3>
               <button
-                onClick={() => setEditingImage(null)}
+                onClick={() => {
+                  setIsAdding(false);
+                  setEditingImage(null);
+                }}
                 className="p-1.5 rounded-full bg-white/10 text-gray-300 hover:bg-white/20"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+            <form onSubmit={handleSubmit} className="space-y-4 flex-1 overflow-y-auto pr-1">
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">Image Title *</label>
                 <input
@@ -98,6 +175,14 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
                 />
               </div>
 
+              {/* Advanced Image Picker Integration */}
+              <ItemImagePicker
+                label="Gallery Photo Source (Supabase Storage)"
+                currentUrl={formData.url || ''}
+                onChangeUrl={(url) => setFormData({ ...formData, url })}
+                galleryImages={images}
+              />
+
               <label className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10 cursor-pointer">
                 <input
                   type="checkbox"
@@ -108,10 +193,13 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
                 <span className="text-xs font-medium">Visible on Customer Gallery Section</span>
               </label>
 
-              <div className="pt-3 flex justify-end gap-3 border-t border-white/10">
+              <div className="pt-3 flex justify-end gap-3 border-t border-white/10 sticky bottom-0 bg-namaha-green-dark py-2">
                 <button
                   type="button"
-                  onClick={() => setEditingImage(null)}
+                  onClick={() => {
+                    setIsAdding(false);
+                    setEditingImage(null);
+                  }}
                   className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20"
                 >
                   Cancel
@@ -121,7 +209,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
                   className="px-6 py-2 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5"
                 >
                   <Save className="w-4 h-4" />
-                  <span>Save Changes</span>
+                  <span>Save Gallery Image</span>
                 </button>
               </div>
             </form>
@@ -131,7 +219,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
 
       {/* Gallery Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {images.map((img) => (
+        {filteredImages.map((img) => (
           <div
             key={img.id}
             className="p-4 rounded-3xl bg-namaha-green-dark border border-namaha-gold/20 shadow-lg flex flex-col justify-between"
@@ -139,7 +227,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
             <div>
               <div className="relative w-full h-40 rounded-2xl overflow-hidden mb-3 border border-white/10 bg-black/40">
                 {/* eslint-disable-next-next/no-img-element */}
-                <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
+                <img src={getFreshImageUrl(img.url)} alt={img.title} className="w-full h-full object-cover" />
               </div>
 
               <div>
@@ -164,7 +252,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
                 <button
                   onClick={() => handleOpenEdit(img)}
                   className="p-1.5 rounded-lg bg-white/10 hover:bg-namaha-gold hover:text-namaha-green-deep text-gray-200 transition"
-                  title="Edit Image Details"
+                  title="Edit Photo Details & Replace Image"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
