@@ -35,13 +35,34 @@ export async function uploadImageToSupabaseStorage(
     const randomHash = Math.random().toString(36).substring(2, 8);
     const filePath = `dishes/${Date.now()}-${randomHash}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
+    // 1. First attempt upload to 'food-images' bucket
+    let { error: uploadError } = await supabase.storage
       .from('food-images')
       .upload(filePath, fileOrBlob, {
         cacheControl: '3600',
         upsert: true,
         contentType: fileOrBlob.type || 'image/jpeg',
       });
+
+    // 2. If bucket is not found, attempt to auto-create 'food-images' public bucket
+    if (uploadError && (uploadError.message?.toLowerCase().includes('bucket not found') || (uploadError as any).statusCode === 404)) {
+      try {
+        await supabase.storage.createBucket('food-images', { public: true });
+        
+        // Retry upload after creating bucket
+        const retryResult = await supabase.storage
+          .from('food-images')
+          .upload(filePath, fileOrBlob, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: fileOrBlob.type || 'image/jpeg',
+          });
+
+        uploadError = retryResult.error;
+      } catch (createErr) {
+        console.warn('Auto createBucket notice:', createErr);
+      }
+    }
 
     if (uploadError) {
       console.error('Supabase storage upload failed:', uploadError);

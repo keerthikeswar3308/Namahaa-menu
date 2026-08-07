@@ -632,7 +632,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
       {/* Status Feedback Banner */}
       {uploadStatusMsg && (
         <div
-          className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fade-in ${
+          className={`p-3.5 rounded-2xl text-xs font-semibold flex flex-col gap-1.5 animate-fade-in ${
             uploadStatusMsg.type === 'success'
               ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/40'
               : uploadStatusMsg.type === 'error'
@@ -640,14 +640,24 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
               : 'bg-amber-950/90 text-amber-300 border border-amber-500/40'
           }`}
         >
-          {uploadStatusMsg.type === 'success' ? (
-            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-          ) : uploadStatusMsg.type === 'error' ? (
-            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          ) : (
-            <Cloud className="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
+          <div className="flex items-center gap-2">
+            {uploadStatusMsg.type === 'success' ? (
+              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            ) : uploadStatusMsg.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            ) : (
+              <Cloud className="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
+            )}
+            <span>{uploadStatusMsg.text}</span>
+          </div>
+
+          {uploadStatusMsg.text.toLowerCase().includes('bucket not found') && (
+            <div className="mt-2 p-3 bg-black/60 rounded-xl border border-red-500/40 text-[11px] text-gray-200 font-normal space-y-1">
+              <span className="font-bold text-namaha-gold block">⚡ Quick 1-Step Fix in Supabase:</span>
+              <p>1. Open your <strong>Supabase Dashboard</strong> at <a href="https://supabase.com/dashboard/project/rhnrcyzzqmqgqoigjmuu/storage/buckets" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">Storage &rarr; Buckets</a>.</p>
+              <p>2. Click <strong>&quot;New Bucket&quot;</strong>, enter name <strong><code className="text-emerald-400 bg-black/80 px-1.5 py-0.5 rounded">food-images</code></strong>, turn <strong>&quot;Public bucket&quot; ON</strong>, and click Save.</p>
+            </div>
           )}
-          <span>{uploadStatusMsg.text}</span>
         </div>
       )}
 
