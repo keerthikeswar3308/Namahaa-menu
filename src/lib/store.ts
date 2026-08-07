@@ -58,46 +58,55 @@ export class NamahaStore {
         .select('*')
         .order('display_order', { ascending: true });
 
-      if (error || !data) {
+      if (error) {
         console.warn('Supabase menu items fetch notice:', error);
         return this.getMenuItems();
       }
 
-      const existingCats = this.getCategories();
+      if (data && data.length > 0) {
+        const existingCats = this.getCategories();
 
-      const mappedItems: MenuItem[] = data.map((d, idx) => {
-        let catId = d.category_id || '';
-        const catName = d.category_name || '';
+        const mappedItems: MenuItem[] = data.map((d, idx) => {
+          let catId = d.category_id || '';
+          const catName = d.category_name || '';
 
-        if (catName && existingCats.length > 0) {
-          const match = existingCats.find((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase());
-          if (match) {
-            catId = match.id;
+          if (catName && existingCats.length > 0) {
+            const match = existingCats.find((c) => c.name.trim().toLowerCase() === catName.trim().toLowerCase());
+            if (match) {
+              catId = match.id;
+            }
           }
+
+          return {
+            id: d.id,
+            name: d.name,
+            description: d.description || '',
+            price: Number(d.price),
+            categoryId: catId || `cat-${catName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
+            categoryName: catName,
+            image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+            isVeg: d.is_veg !== false,
+            preparationTime: d.preparation_time || '10 mins',
+            isAvailable: d.is_available !== false,
+            isPopular: Boolean(d.is_popular),
+            isChefSpecial: Boolean(d.is_chef_special),
+            isTodaySpecial: Boolean(d.is_today_special),
+            ingredients: d.ingredients || [],
+            chefRecommendation: d.chef_recommendation || '',
+            displayOrder: d.display_order || (idx + 1),
+          };
+        });
+
+        this.setMenuItems(mappedItems);
+        return mappedItems;
+      } else if (data && data.length === 0) {
+        // If DB is empty, auto-push local items to Supabase so items are permanently persisted!
+        const local = this.getMenuItems();
+        if (local.length > 0) {
+          await this.syncAllMenuItemsToSupabase();
+          return local;
         }
-
-        return {
-          id: d.id,
-          name: d.name,
-          description: d.description || '',
-          price: Number(d.price),
-          categoryId: catId || `cat-${catName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
-          categoryName: catName,
-          image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-          isVeg: d.is_veg !== false,
-          preparationTime: d.preparation_time || '10 mins',
-          isAvailable: d.is_available !== false,
-          isPopular: Boolean(d.is_popular),
-          isChefSpecial: Boolean(d.is_chef_special),
-          isTodaySpecial: Boolean(d.is_today_special),
-          ingredients: d.ingredients || [],
-          chefRecommendation: d.chef_recommendation || '',
-          displayOrder: d.display_order || (idx + 1),
-        };
-      });
-
-      this.setMenuItems(mappedItems);
-      return mappedItems;
+      }
     } catch (e) {
       console.error('Error syncing menu items from Supabase:', e);
     }
@@ -118,38 +127,42 @@ export class NamahaStore {
     notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
-      // Ensure category exists first in categories table to satisfy any foreign key constraint
-      if (newItem.categoryId && newItem.categoryName) {
-        await supabase.from('categories').upsert({
-          id: newItem.categoryId,
-          name: newItem.categoryName,
-          display_order: 1,
-          is_enabled: true,
+      try {
+        // Ensure category exists first to satisfy foreign key constraint!
+        if (newItem.categoryId && newItem.categoryName) {
+          await supabase.from('categories').upsert({
+            id: newItem.categoryId,
+            name: newItem.categoryName,
+            display_order: 1,
+            is_enabled: true,
+          });
+        }
+
+        const { error } = await supabase.from('menu_items').upsert({
+          id: newItem.id,
+          name: newItem.name,
+          description: newItem.description || '',
+          price: newItem.price,
+          category_id: newItem.categoryId,
+          category_name: newItem.categoryName,
+          image: newItem.image,
+          image_url: newItem.image,
+          is_veg: newItem.isVeg !== false,
+          preparation_time: newItem.preparationTime || '10 mins',
+          is_available: newItem.isAvailable !== false,
+          is_popular: Boolean(newItem.isPopular),
+          is_chef_special: Boolean(newItem.isChefSpecial),
+          is_today_special: Boolean(newItem.isTodaySpecial),
+          ingredients: newItem.ingredients || [],
+          chef_recommendation: newItem.chefRecommendation || '',
+          display_order: newItem.displayOrder || 1,
         });
+
+        if (error) console.error('Supabase add item error:', error);
+        else notifyStoreUpdated();
+      } catch (err) {
+        console.error('addMenuItem exception:', err);
       }
-
-      const { error } = await supabase.from('menu_items').upsert({
-        id: newItem.id,
-        name: newItem.name,
-        description: newItem.description || '',
-        price: newItem.price,
-        category_id: newItem.categoryId,
-        category_name: newItem.categoryName,
-        image: newItem.image,
-        image_url: newItem.image,
-        is_veg: newItem.isVeg !== false,
-        preparation_time: newItem.preparationTime || '10 mins',
-        is_available: newItem.isAvailable !== false,
-        is_popular: Boolean(newItem.isPopular),
-        is_chef_special: Boolean(newItem.isChefSpecial),
-        is_today_special: Boolean(newItem.isTodaySpecial),
-        ingredients: newItem.ingredients || [],
-        chef_recommendation: newItem.chefRecommendation || '',
-        display_order: newItem.displayOrder || 1,
-      });
-
-      if (error) console.error('Supabase add item error:', error);
-      else notifyStoreUpdated();
     }
 
     // Cross-sync with Gallery if matching title exists
@@ -181,37 +194,41 @@ export class NamahaStore {
     notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
-      if (updatedItem.categoryId && updatedItem.categoryName) {
-        await supabase.from('categories').upsert({
-          id: updatedItem.categoryId,
-          name: updatedItem.categoryName,
-          display_order: 1,
-          is_enabled: true,
+      try {
+        if (updatedItem.categoryId && updatedItem.categoryName) {
+          await supabase.from('categories').upsert({
+            id: updatedItem.categoryId,
+            name: updatedItem.categoryName,
+            display_order: 1,
+            is_enabled: true,
+          });
+        }
+
+        const { error } = await supabase.from('menu_items').upsert({
+          id: updatedItem.id,
+          name: updatedItem.name,
+          description: updatedItem.description || '',
+          price: updatedItem.price,
+          category_id: updatedItem.categoryId,
+          category_name: updatedItem.categoryName,
+          image: updatedItem.image,
+          image_url: updatedItem.image,
+          is_veg: updatedItem.isVeg !== false,
+          preparation_time: updatedItem.preparationTime || '10 mins',
+          is_available: updatedItem.isAvailable !== false,
+          is_popular: Boolean(updatedItem.isPopular),
+          is_chef_special: Boolean(updatedItem.isChefSpecial),
+          is_today_special: Boolean(updatedItem.isTodaySpecial),
+          ingredients: updatedItem.ingredients || [],
+          chef_recommendation: updatedItem.chefRecommendation || '',
+          display_order: updatedItem.displayOrder || 1,
         });
+
+        if (error) console.error('Supabase update item error:', error);
+        else notifyStoreUpdated();
+      } catch (err) {
+        console.error('updateMenuItem exception:', err);
       }
-
-      const { error } = await supabase.from('menu_items').upsert({
-        id: updatedItem.id,
-        name: updatedItem.name,
-        description: updatedItem.description || '',
-        price: updatedItem.price,
-        category_id: updatedItem.categoryId,
-        category_name: updatedItem.categoryName,
-        image: updatedItem.image,
-        image_url: updatedItem.image,
-        is_veg: updatedItem.isVeg !== false,
-        preparation_time: updatedItem.preparationTime || '10 mins',
-        is_available: updatedItem.isAvailable !== false,
-        is_popular: Boolean(updatedItem.isPopular),
-        is_chef_special: Boolean(updatedItem.isChefSpecial),
-        is_today_special: Boolean(updatedItem.isTodaySpecial),
-        ingredients: updatedItem.ingredients || [],
-        chef_recommendation: updatedItem.chefRecommendation || '',
-        display_order: updatedItem.displayOrder || 1,
-      });
-
-      if (error) console.error('Supabase update item error:', error);
-      else notifyStoreUpdated();
     }
 
     // Cross-sync with Gallery if image changed
@@ -259,19 +276,22 @@ export class NamahaStore {
     }
   }
 
-  static replaceAllMenuItems(newItems: MenuItem[], newCategories?: Category[]): void {
+  static async replaceAllMenuItems(newItems: MenuItem[], newCategories?: Category[]): Promise<boolean> {
     if (newCategories && newCategories.length > 0) {
       this.setCategories(newCategories);
       if (isSupabaseConfigured()) {
-        supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(() => {
-          supabase.from('categories').upsert(newCategories.map(c => ({
+        try {
+          await supabase.from('categories').upsert(newCategories.map((c) => ({
             id: c.id,
             name: c.name,
             description: c.description || '',
+            image: c.image || '',
             display_order: c.displayOrder || 1,
             is_enabled: c.isEnabled !== false,
           })));
-        });
+        } catch (err) {
+          console.error('Categories upsert error:', err);
+        }
       }
     }
 
@@ -279,22 +299,49 @@ export class NamahaStore {
     notifyStoreUpdated();
 
     if (isSupabaseConfigured()) {
-      supabase.from('menu_items').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(() => {
-        supabase.from('menu_items').upsert(newItems.map(i => ({
-          id: i.id,
-          name: i.name,
-          description: i.description || '',
-          price: i.price,
-          category_id: i.categoryId,
-          category_name: i.categoryName,
-          image_url: i.image,
-          is_veg: i.isVeg,
-          preparation_time: i.preparationTime,
-          is_available: i.isAvailable,
-          display_order: i.displayOrder,
-        })));
-      });
+      try {
+        // 1. Fetch current IDs in DB
+        const { data: existingDbRows } = await supabase.from('menu_items').select('id');
+        const newIds = new Set(newItems.map((i) => i.id));
+        const idsToDelete = existingDbRows?.map((r) => r.id).filter((id) => !newIds.has(id)) || [];
+
+        if (idsToDelete.length > 0) {
+          await supabase.from('menu_items').delete().in('id', idsToDelete);
+        }
+
+        // 2. Upsert in batches of 25
+        const batchSize = 25;
+        for (let i = 0; i < newItems.length; i += batchSize) {
+          const batch = newItems.slice(i, i + batchSize);
+          const payload = batch.map((item) => ({
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            price: item.price,
+            category_id: item.categoryId,
+            category_name: item.categoryName,
+            image: item.image,
+            image_url: item.image,
+            is_veg: item.isVeg !== false,
+            preparation_time: item.preparationTime || '10 mins',
+            is_available: item.isAvailable !== false,
+            is_popular: Boolean(item.isPopular),
+            is_chef_special: Boolean(item.isChefSpecial),
+            is_today_special: Boolean(item.isTodaySpecial),
+            ingredients: item.ingredients || [],
+            chef_recommendation: item.chefRecommendation || '',
+            display_order: item.displayOrder || 1,
+          }));
+
+          await supabase.from('menu_items').upsert(payload);
+        }
+        notifyStoreUpdated();
+        return true;
+      } catch (err) {
+        console.error('replaceAllMenuItems error:', err);
+      }
     }
+    return true;
   }
 
   // ==========================================

@@ -123,7 +123,7 @@ export default function AdminPage() {
     setGalleryImages(NamahaStore.getGallery());
   };
 
-  const handleDocxImportSuccess = (result: ParsedImportResult, mode: 'replace' | 'merge' = 'merge') => {
+  const handleDocxImportSuccess = async (result: ParsedImportResult, mode: 'replace' | 'merge' = 'merge') => {
     if (mode === 'replace') {
       // 1. Clean slate: Generate new categories and items
       const newCategories: Category[] = result.categories.map((c, idx) => ({
@@ -153,7 +153,7 @@ export default function AdminPage() {
         };
       });
 
-      NamahaStore.replaceAllMenuItems(newItems, newCategories);
+      await NamahaStore.replaceAllMenuItems(newItems, newCategories);
       loadAllData();
       return;
     }
@@ -174,7 +174,7 @@ export default function AdminPage() {
       if (matchCat) {
         item.categoryId = matchCat.id;
       }
-      NamahaStore.addMenuItem(item);
+      await NamahaStore.addMenuItem(item);
     }
 
     loadAllData();
