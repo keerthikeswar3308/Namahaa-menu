@@ -42,6 +42,7 @@ interface DocxImporterProps {
   galleryImages: GalleryImage[];
   onImportSuccess: (result: ParsedImportResult, mode: 'replace' | 'merge') => void;
   onDeleteItem: (id: string) => void;
+  onDeleteCategory?: (id: string) => void;
   onSaveItem: (item: MenuItem | Omit<MenuItem, 'id'>) => void;
   onClearAllItems: () => void;
   onResetDefaultMenu: () => void;
@@ -55,6 +56,7 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
   galleryImages,
   onImportSuccess,
   onDeleteItem,
+  onDeleteCategory,
   onSaveItem,
   onClearAllItems,
   onResetDefaultMenu,
@@ -71,6 +73,10 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [activeImportDoc, setActiveImportDoc] = useState<SavedDocxDocument | null>(null);
   const [showImportChoiceModal, setShowImportChoiceModal] = useState(false);
+
+  // Document Delete Confirmation Modal
+  const [docToDelete, setDocToDelete] = useState<SavedDocxDocument | null>(null);
+  const [isDeletingAssociated, setIsDeletingAssociated] = useState(false);
 
   // Live menu search & filter in right column
   const [searchLiveQuery, setSearchLiveQuery] = useState('');
@@ -192,13 +198,60 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
     setActiveImportDoc(null);
   };
 
-  const handleDeleteDocument = (id: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const updated = savedDocs.filter((d) => d.id !== id);
+  // --- DELETE DOCUMENT WITH ASSOCIATED DISHES & CATEGORIES REMOVAL ---
+  const handleConfirmDeleteDocAndDishes = async (doc: SavedDocxDocument) => {
+    setIsDeletingAssociated(true);
+    try {
+      const docItemNames = new Set(doc.result.items.map((i) => i.name.trim().toLowerCase()));
+      const docCatNames = new Set(doc.result.categories.map((c) => c.name.trim().toLowerCase()));
+
+      // 1. Delete all matching dishes from live menu
+      let deletedDishCount = 0;
+      for (const liveItem of currentItems) {
+        const matchesName = docItemNames.has(liveItem.name.trim().toLowerCase());
+        const matchesCat = docCatNames.has(liveItem.categoryName.trim().toLowerCase());
+        if (matchesName || matchesCat) {
+          await onDeleteItem(liveItem.id);
+          deletedDishCount++;
+        }
+      }
+
+      // 2. Delete corresponding categories if onDeleteCategory is available
+      let deletedCatCount = 0;
+      if (onDeleteCategory) {
+        for (const cat of categories) {
+          if (docCatNames.has(cat.name.trim().toLowerCase())) {
+            await onDeleteCategory(cat.id);
+            deletedCatCount++;
+          }
+        }
+      }
+
+      // 3. Remove document slide from saved list
+      const updated = savedDocs.filter((d) => d.id !== doc.id);
+      persistDocs(updated);
+      if (expandedDocId === doc.id) setExpandedDocId(null);
+      setDocToDelete(null);
+
+      setSuccessMsg(
+        `🗑️ Removed "${doc.filename}" and deleted ${deletedDishCount} dishes & ${deletedCatCount} categories from your live menu and Supabase!`
+      );
+      setTimeout(() => setSuccessMsg(''), 5000);
+    } catch (err: any) {
+      console.error('Error deleting doc and associated items:', err);
+      setError(`Failed to delete some associated items: ${err.message}`);
+    } finally {
+      setIsDeletingAssociated(false);
+    }
+  };
+
+  const handleDeleteDocDraftOnly = (doc: SavedDocxDocument) => {
+    const updated = savedDocs.filter((d) => d.id !== doc.id);
     persistDocs(updated);
-    if (expandedDocId === id) setExpandedDocId(null);
-    setSuccessMsg('Document removed from your drafts.');
-    setTimeout(() => setSuccessMsg(''), 3000);
+    if (expandedDocId === doc.id) setExpandedDocId(null);
+    setDocToDelete(null);
+    setSuccessMsg(`Removed "${doc.filename}" draft. (Live menu items retained).`);
+    setTimeout(() => setSuccessMsg(''), 3500);
   };
 
   const handleClearAllDocs = () => {
@@ -413,13 +466,16 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
                           </div>
                         </div>
 
-                        {/* Delete Symbol / Button */}
+                        {/* Delete Symbol / Button - Opens Confirmation Modal */}
                         <button
-                          onClick={(e) => handleDeleteDocument(doc.id, e)}
-                          className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-600 text-red-300 hover:text-white transition flex-shrink-0"
-                          title="Delete this document draft"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDocToDelete(doc);
+                          }}
+                          className="p-1.5 rounded-lg bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white transition flex-shrink-0"
+                          title="Delete this document and remove associated items"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
 
@@ -449,284 +505,318 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
                             setActiveImportDoc(doc);
                             setShowImportChoiceModal(true);
                           }}
-                          className="px-2.5 py-1 rounded-xl bg-namaha-gold hover:bg-amber-400 text-namaha-green-deep font-bold text-[10px] transition flex items-center gap-1 shadow"
+                          className="px-3 py-1 rounded-xl bg-gradient-to-r from-namaha-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-namaha-green-deep font-extrabold text-[10px] shadow-sm flex items-center gap-1 transition"
                         >
-                          <Sparkles className="w-3 h-3" />
+                          <Zap className="w-3 h-3" />
                           <span>Apply / Replace</span>
                         </button>
                       </div>
 
-                      {/* Expanded Dishes List */}
+                      {/* Expandable Preview of Categories and Dishes inside this doc */}
                       {isExpanded && (
-                        <div className="mt-2.5 pt-2 border-t border-white/10 space-y-1 animate-fade-in max-h-40 overflow-y-auto">
-                          {doc.result.items.map((item, idx) => (
-                            <div
-                              key={idx}
-                              className="p-1 rounded-lg bg-white/5 flex items-center justify-between text-[10px]"
-                            >
-                              <div className="flex items-center gap-1 truncate">
-                                <span className="px-1 py-0.2 rounded bg-namaha-gold/20 text-namaha-gold font-bold text-[8px]">
-                                  {item.categoryName}
-                                </span>
-                                <span className="text-white truncate font-medium">{item.name}</span>
-                              </div>
-                              <span className="font-bold text-namaha-gold ml-1 flex-shrink-0">
-                                ₹{item.price}
+                        <div className="mt-3 pt-3 border-t border-white/10 space-y-2 text-[11px]">
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {doc.result.categories.map((c, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-md bg-namaha-gold/15 text-namaha-gold text-[9px] font-bold">
+                                {c.name}
                               </span>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+
+                          <div className="max-h-40 overflow-y-auto divide-y divide-white/5 bg-black/40 p-2 rounded-xl border border-white/5">
+                            {doc.result.items.map((item, idx) => (
+                              <div key={idx} className="py-1 flex items-center justify-between gap-2">
+                                <span className="truncate text-gray-200">{item.name}</span>
+                                <span className="font-bold text-namaha-gold flex-shrink-0">₹{item.price}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
-
                     </div>
                   );
                 })}
               </div>
             )}
-
           </div>
-
         </div>
 
-        {/* RIGHT COLUMN: Live Menu Items & Side-by-Side Quick Editor (7 cols) */}
+        {/* RIGHT COLUMN: Current Live Menu with Search, Image Linking & Inline Edit (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
-          
-          <div className="p-6 rounded-3xl bg-namaha-green-dark border-2 border-namaha-gold/40 shadow-2xl space-y-4">
+          <div className="p-6 rounded-3xl bg-namaha-green-dark border border-namaha-gold/20 shadow-xl space-y-4">
             
-            {/* Header & Stats */}
+            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div>
                 <h3 className="text-lg font-serif font-bold text-namaha-gold flex items-center gap-2">
-                  <Utensils className="w-5 h-5" />
+                  <Utensils className="w-5 h-5 text-namaha-gold" />
                   <span>Current Live Menu ({currentItems.length} Dishes)</span>
                 </h3>
-                <p className="text-xs text-gray-300">
+                <p className="text-xs text-gray-400">
                   Manage, delete, upload images, or replace dishes side-by-side with your Word document.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold">
+                <span className="px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
                   {categories.length} Categories
                 </span>
               </div>
             </div>
 
-            {/* Filter & Search Controls */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-              <div className="sm:col-span-7 relative">
-                <Search className="w-3.5 h-3.5 text-namaha-gold absolute left-3 top-3 z-10" />
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="relative w-full sm:flex-1">
+                <Search className="w-4 h-4 text-namaha-gold absolute left-3 top-3" />
                 <input
                   type="text"
                   value={searchLiveQuery}
                   onChange={(e) => setSearchLiveQuery(e.target.value)}
                   placeholder="Search live dishes..."
-                  className="w-full pl-9 pr-3 py-2 bg-emerald-950/90 border border-namaha-gold/30 rounded-xl text-xs font-medium text-white placeholder-gray-400 focus:outline-none focus:border-namaha-gold shadow"
+                  className="w-full pl-9 pr-3 py-2 bg-black/60 border border-white/20 rounded-xl text-xs text-white placeholder-gray-400 focus:border-namaha-gold focus:outline-none"
                 />
               </div>
 
-              <div className="sm:col-span-5">
-                <select
-                  value={selectedLiveCat}
-                  onChange={(e) => setSelectedLiveCat(e.target.value)}
-                  className="w-full px-3 py-2 bg-emerald-950/90 border border-namaha-gold/30 rounded-xl text-xs font-medium text-white focus:outline-none focus:border-namaha-gold shadow"
-                >
-                  <option value="all">All Categories ({categories.length})</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={selectedLiveCat}
+                onChange={(e) => setSelectedLiveCat(e.target.value)}
+                className="w-full sm:w-48 px-3 py-2 bg-black/60 border border-white/20 rounded-xl text-xs text-white focus:border-namaha-gold focus:outline-none"
+              >
+                <option value="all">All Categories ({categories.length})</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Live Dishes List with Delete & Upload Image Actions */}
-            {filteredLiveItems.length === 0 ? (
-              <div className="p-8 text-center bg-black/40 rounded-2xl border border-white/10 text-gray-400 space-y-2">
-                <Utensils className="w-8 h-8 mx-auto text-gray-500 opacity-60" />
-                <p className="text-sm font-semibold text-white">No dishes found matching filter.</p>
-                <p className="text-xs text-gray-400">
-                  Upload a Word document on the left and click &quot;Replace Full Menu&quot; to populate your menu.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
-                {filteredLiveItems.map((item) => (
+            {/* Live Dishes List */}
+            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+              {filteredLiveItems.length === 0 ? (
+                <div className="p-8 text-center bg-black/30 rounded-2xl border border-white/5 text-gray-400">
+                  No dishes found matching your query.
+                </div>
+              ) : (
+                filteredLiveItems.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3.5 rounded-2xl bg-black/50 border border-white/10 hover:border-namaha-gold/40 flex items-center justify-between gap-3 transition"
+                    className="p-3 rounded-2xl bg-black/50 border border-white/10 hover:border-namaha-gold/40 transition flex items-center justify-between gap-3 group"
                   >
-                    {/* Dish Image & Info */}
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {/* Image Thumbnail with Upload Trigger */}
-                      <button
-                        type="button"
-                        onClick={() => setImagePickerItem(item)}
-                        className="w-12 h-12 rounded-xl overflow-hidden relative flex-shrink-0 group border border-white/20 hover:border-namaha-gold transition"
-                        title="Click to change dish photo"
-                      >
+                      <div className="w-12 h-12 rounded-xl bg-namaha-green-deep overflow-hidden flex-shrink-0 relative border border-white/10">
                         {/* eslint-disable-next-next/no-img-element */}
                         <img
-                          src={item.image}
+                          src={item.image || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'}
                           alt={item.name}
-                          className="w-full h-full object-cover group-hover:scale-110 transition"
+                          className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                          <ImageIcon className="w-4 h-4 text-namaha-gold" />
-                        </div>
-                      </button>
+                      </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-white truncate" title={item.name}>
-                            {item.name}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-namaha-gold/20 text-namaha-gold font-bold text-[9px] flex-shrink-0">
+                          <h4 className="font-bold text-white text-xs sm:text-sm truncate">{item.name}</h4>
+                          <span className="px-2 py-0.5 rounded bg-namaha-gold/20 text-namaha-gold text-[9px] font-bold flex-shrink-0">
                             {item.categoryName}
                           </span>
                         </div>
-                        <p className="text-[10px] text-gray-400 truncate mt-0.5">
-                          {item.description || 'Authentic dish'}
-                        </p>
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5">{item.description}</p>
                       </div>
                     </div>
 
-                    {/* Price & Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="font-serif font-bold text-sm text-namaha-gold px-2 py-1 rounded-lg bg-white/5">
+                      <span className="font-serif font-bold text-namaha-gold text-xs sm:text-sm">
                         ₹{item.price}
                       </span>
 
-                      {/* Quick Image Upload Button */}
+                      {/* Food Photo Button */}
                       <button
                         type="button"
                         onClick={() => setImagePickerItem(item)}
-                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-namaha-gold transition"
-                        title="Upload / Change Dish Photo"
+                        className="p-2 rounded-xl bg-white/10 hover:bg-namaha-gold hover:text-namaha-green-deep text-gray-300 transition"
+                        title="Upload dish photo to Supabase (food-images)"
                       >
                         <ImageIcon className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Edit Dish Button */}
+                      {/* Edit Details */}
                       <button
                         type="button"
                         onClick={() => setEditingItem(item)}
-                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
-                        title="Edit Dish details"
+                        className="p-2 rounded-xl bg-white/10 hover:bg-namaha-gold hover:text-namaha-green-deep text-gray-300 transition"
+                        title="Edit dish name, price & description"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Delete Symbol / Button */}
+                      {/* Delete Item Directly */}
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm(`Delete "${item.name}" from live menu?`)) {
+                          if (confirm(`Delete "${item.name}" from live menu & Supabase?`)) {
                             onDeleteItem(item.id);
-                            setSuccessMsg(`Deleted "${item.name}".`);
+                            setSuccessMsg(`Deleted "${item.name}" from live menu!`);
                             setTimeout(() => setSuccessMsg(''), 3000);
                           }
                         }}
-                        className="p-2 rounded-xl bg-red-950/60 hover:bg-red-600 text-red-300 hover:text-white transition shadow"
-                        title="Delete this dish from live menu"
+                        className="p-2 rounded-xl bg-red-950/60 hover:bg-red-600 text-red-300 hover:text-white transition"
+                        title="Delete this dish"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
 
           </div>
-
         </div>
 
       </div>
 
       {/* ======================================================== */}
-      {/* MODAL 1: REPLACE VS MERGE CHOICE MODAL */}
+      {/* MODAL 1: IMPORT CHOICE (REPLACE OR MERGE) */}
       {/* ======================================================== */}
       {showImportChoiceModal && activeImportDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl p-6 shadow-2xl text-white space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-lg font-serif font-bold text-namaha-gold flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-namaha-gold" />
+                <span>Apply Word Menu: {activeImportDoc.filename}</span>
+              </h3>
+              <button onClick={() => setShowImportChoiceModal(false)} className="p-1 rounded-full hover:bg-white/10">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-black/40 border border-white/10 text-xs space-y-1 text-gray-300">
+              <div>Parsed Dishes: <strong className="text-white">{activeImportDoc.result.items.length} items</strong></div>
+              <div>Detected Categories: <strong className="text-namaha-gold">{activeImportDoc.result.categories.length} categories</strong></div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => executeImport('replace')}
+                className="p-4 rounded-2xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-left font-bold text-xs shadow-lg space-y-1 transition"
+              >
+                <div className="flex items-center gap-1.5 text-sm">
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Full Replace Menu</span>
+                </div>
+                <p className="text-[10px] text-white/80 font-normal">
+                  Clears all previous dishes and replaces everything with this Word document.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => executeImport('merge')}
+                className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-left font-bold text-xs shadow-lg space-y-1 transition"
+              >
+                <div className="flex items-center gap-1.5 text-sm">
+                  <Plus className="w-4 h-4" />
+                  <span>Merge / Add Items</span>
+                </div>
+                <p className="text-[10px] text-white/80 font-normal">
+                  Keeps existing custom items and adds these new dishes on top.
+                </p>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 2: DELETE DOCUMENT SLIDE WITH ASSOCIATED DISHES & CATEGORIES REMOVAL */}
+      {/* ======================================================== */}
+      {docToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-lg bg-namaha-green-dark border-2 border-namaha-gold rounded-3xl p-6 shadow-2xl text-white space-y-5">
+          <div className="w-full max-w-lg bg-namaha-green-dark border-2 border-red-500/40 rounded-3xl p-6 shadow-2xl text-white space-y-4">
             
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-namaha-gold" />
-                <h3 className="text-lg font-serif font-bold text-namaha-gold">
-                  Choose Menu Import Action
-                </h3>
+                <div className="p-2 rounded-xl bg-red-950 text-red-400 border border-red-500/30">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-white">
+                    Delete Menu Document Slide
+                  </h3>
+                  <span className="text-[11px] text-gray-400">{docToDelete.filename}</span>
+                </div>
               </div>
+              
               <button
-                onClick={() => setShowImportChoiceModal(false)}
-                className="p-1 rounded-full text-gray-400 hover:text-white"
+                onClick={() => setDocToDelete(null)}
+                disabled={isDeletingAssociated}
+                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-300"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/10 text-xs space-y-1">
-              <div className="font-bold text-white text-sm">
-                Document: <span className="text-namaha-gold">{activeImportDoc.filename}</span>
-              </div>
-              <p className="text-gray-300">
-                Contains <strong className="text-white">{activeImportDoc.result.items.length} dishes</strong> across{' '}
-                <strong className="text-white">{activeImportDoc.result.categories.length} categories</strong>.
+            {/* Description */}
+            <div className="p-4 rounded-2xl bg-black/50 border border-white/10 text-xs space-y-2 text-gray-300">
+              <p className="font-semibold text-white">
+                How would you like to delete this document slide?
               </p>
+              <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                <span>Dishes in doc: <strong className="text-white">{docToDelete.result.items.length}</strong></span>
+                <span>•</span>
+                <span>Categories in doc: <strong className="text-namaha-gold">{docToDelete.result.categories.length}</strong></span>
+              </div>
             </div>
 
-            <p className="text-xs text-gray-300">
-              How would you like to apply this document to your live customer website?
-            </p>
-
-            <div className="grid grid-cols-1 gap-3">
-              
-              {/* Choice 1: REPLACE ENTIRE MENU */}
+            {/* Action Choices */}
+            <div className="space-y-3 pt-2">
+              {/* Choice 1: Delete Doc AND Remove all associated items from Category & Menu */}
               <button
                 type="button"
-                onClick={() => executeImport('replace')}
-                className="p-4 rounded-2xl bg-gradient-to-r from-red-950/80 to-amber-950/80 hover:from-red-900 hover:to-amber-900 border-2 border-red-500/50 hover:border-red-400 text-left transition space-y-1 group"
+                disabled={isDeletingAssociated}
+                onClick={() => handleConfirmDeleteDocAndDishes(docToDelete)}
+                className="w-full p-4 rounded-2xl bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 border border-red-500/50 text-white text-left font-bold text-xs shadow-lg transition flex items-center justify-between group disabled:opacity-50"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-red-300 group-hover:text-white flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-red-400" />
-                    Option A: Replace Full Menu (Clean Slate)
+                <div>
+                  <span className="text-sm font-extrabold text-white block flex items-center gap-1.5">
+                    <Trash2 className="w-4 h-4 text-red-300" />
+                    <span>Delete Doc & Remove Associated Dishes from Menu & Categories</span>
                   </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold">
-                    Recommended for fresh docs
+                  <span className="text-[10px] text-red-200/80 font-normal mt-0.5 block">
+                    Permanently deletes this document draft and all its dishes and categories from your live Supabase menu.
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-300">
-                  Wipes old items and duplicate categories, making this Word document the exact new single source of truth.
-                </p>
+                {isDeletingAssociated && (
+                  <RefreshCw className="w-5 h-5 animate-spin text-white flex-shrink-0" />
+                )}
               </button>
 
-              {/* Choice 2: ADD / MERGE INTO PREVIOUS MENU */}
+              {/* Choice 2: Delete Document Draft Slide Only */}
               <button
                 type="button"
-                onClick={() => executeImport('merge')}
-                className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/80 to-teal-950/80 hover:from-emerald-900 hover:to-teal-900 border-2 border-emerald-500/50 hover:border-emerald-400 text-left transition space-y-1 group"
+                disabled={isDeletingAssociated}
+                onClick={() => handleDeleteDocDraftOnly(docToDelete)}
+                className="w-full p-3.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-left font-semibold text-xs transition"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-emerald-300 group-hover:text-white flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-emerald-400" />
-                    Option B: Add / Merge to Previous Menu
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-300">
-                  Keeps your current {currentItems.length} dishes and adds these {activeImportDoc.result.items.length} new items to the menu.
-                </p>
+                <span className="text-xs font-bold text-gray-200 block">
+                  📄 Delete Document Slide Draft Only
+                </span>
+                <span className="text-[10px] text-gray-400 block mt-0.5">
+                  Removes this slide from the side list without touching your live website menu.
+                </span>
               </button>
-
             </div>
 
+            {/* Cancel */}
             <div className="flex justify-end pt-2 border-t border-white/10">
               <button
                 type="button"
-                onClick={() => setShowImportChoiceModal(false)}
-                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-gray-300"
+                disabled={isDeletingAssociated}
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold"
               >
                 Cancel
               </button>
@@ -737,44 +827,41 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* MODAL 2: FAST IMAGE PICKER MODAL FOR DISH */}
+      {/* MODAL 3: DISH IMAGE PICKER (SUPABASE FOOD-IMAGES TARGET) */}
       {/* ======================================================== */}
       {imagePickerItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-xl bg-namaha-green-dark border-2 border-namaha-gold rounded-3xl p-6 shadow-2xl text-white space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="w-full max-w-xl bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl p-6 shadow-2xl text-white space-y-4 my-auto">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <h3 className="text-lg font-serif font-bold text-namaha-gold flex items-center gap-2">
-                  <ImageIcon className="w-5 h-5" /> Change Photo for &quot;{imagePickerItem.name}&quot;
+                <h3 className="text-lg font-serif font-bold text-namaha-gold">
+                  Upload Photo for &ldquo;{imagePickerItem.name}&rdquo;
                 </h3>
-                <span className="text-xs text-gray-400">{imagePickerItem.categoryName} • ₹{imagePickerItem.price}</span>
+                <span className="text-[11px] text-gray-400">Stored in Supabase Storage (food-images)</span>
               </div>
-              <button
-                onClick={() => setImagePickerItem(null)}
-                className="p-1 rounded-full text-gray-400 hover:text-white"
-              >
+              <button onClick={() => setImagePickerItem(null)} className="p-1 rounded-full hover:bg-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <ItemImagePicker
               currentUrl={imagePickerItem.image}
-              onChangeUrl={(newUrl) => {
-                const updated = { ...imagePickerItem, image: newUrl };
+              onChangeUrl={(url) => {
+                const updated = { ...imagePickerItem, image: url };
                 onSaveItem(updated);
-                setImagePickerItem(updated);
-                setSuccessMsg(`Photo updated for "${imagePickerItem.name}" and synced to all devices!`);
+                setImagePickerItem(null);
+                setSuccessMsg(`Uploaded and linked photo for "${imagePickerItem.name}" to Supabase!`);
+                setTimeout(() => setSuccessMsg(''), 4000);
               }}
               galleryImages={galleryImages}
             />
 
             <div className="flex justify-end pt-2 border-t border-white/10">
               <button
-                type="button"
                 onClick={() => setImagePickerItem(null)}
-                className="px-5 py-2.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md"
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold"
               >
-                Done
+                Close
               </button>
             </div>
           </div>
@@ -782,19 +869,16 @@ export const DocxImporter: React.FC<DocxImporterProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* MODAL 3: QUICK EDIT DISH DETAILS */}
+      {/* MODAL 4: INLINE EDIT DISH DETAILS */}
       {/* ======================================================== */}
       {editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md bg-namaha-green-dark border-2 border-namaha-gold rounded-3xl p-6 shadow-2xl text-white space-y-4">
+          <div className="w-full max-w-md bg-namaha-green-dark border-2 border-namaha-gold/40 rounded-3xl p-6 shadow-2xl text-white space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-lg font-serif font-bold text-namaha-gold flex items-center gap-2">
-                <Edit3 className="w-5 h-5" /> Edit Dish Details
+              <h3 className="text-lg font-serif font-bold text-namaha-gold">
+                Edit Food Item Details
               </h3>
-              <button
-                onClick={() => setEditingItem(null)}
-                className="p-1 rounded-full text-gray-400 hover:text-white"
-              >
+              <button onClick={() => setEditingItem(null)} className="p-1 rounded-full hover:bg-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>

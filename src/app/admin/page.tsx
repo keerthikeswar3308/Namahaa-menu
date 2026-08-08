@@ -367,6 +367,7 @@ export default function AdminPage() {
             galleryImages={galleryImages}
             onImportSuccess={handleDocxImportSuccess}
             onDeleteItem={handleDeleteMenuItem}
+            onDeleteCategory={handleDeleteCategory}
             onSaveItem={handleSaveMenuItem}
             onClearAllItems={handleClearAllItems}
             onResetDefaultMenu={handleResetMenu}
