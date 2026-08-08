@@ -24,20 +24,18 @@
     </textPath>
   </text>
 
-  <!-- Central Namaste Icon & Brand Title -->
-  <g transform="translate(150, 155)" text-anchor="middle">
+  <!-- Central Brand Title Group -->
+  <g transform="translate(150, 145)" text-anchor="middle">
     
-    <!-- Central Namaste Hands Icon -->
-    <g transform="translate(-30, -78) scale(0.65)">
-      <path d="M 12,92 C 16,72 26,45 38,20 Q 45,8 48,0 C 48,0 45,28 35,52 C 27,70 24,92 24,92 Z" fill="url(#goldGradCircle)"/>
-      <path d="M 0,92 C 4,75 14,52 24,32 C 30,20 38,8 42,0 C 42,0 37,25 29,48 C 21,68 12,92 12,92 Z" fill="url(#goldGradCircle)"/>
-      <path d="M 84,92 C 80,72 70,45 58,20 Q 51,8 48,0 C 48,0 51,28 61,52 C 69,70 72,92 72,92 Z" fill="url(#goldGradCircle)"/>
-      <path d="M 96,92 C 92,75 82,52 72,32 C 66,20 58,8 54,0 C 54,0 59,25 67,48 C 75,68 84,92 84,92 Z" fill="url(#goldGradCircle)"/>
-      <path d="M -4,92 Q 48,114 100,92 L 90,78 Q 48,96 6,78 Z" fill="url(#goldGradCircle)"/>
+    <!-- Traditional Diya / Flame Top Motif (No namaste emoji) -->
+    <g transform="translate(0, -50)">
+      <path d="M 0,-18 C 6,-10 10,-4 10,4 C 10,10 5,15 0,15 C -5,15 -10,10 -10,4 C -10,-4 -6,-10 0,-18 Z" fill="url(#goldGradCircle)"/>
+      <circle cx="0" cy="2" r="3.5" fill="#002E2B"/>
+      <path d="M -16,14 Q 0,22 16,14 Q 0,26 -16,14 Z" fill="url(#goldGradCircle)"/>
     </g>
 
-    <!-- NAMAHAA Main Text -->
-    <text y="5" font-family="'Outfit', sans-serif" font-size="28" font-weight="900" fill="url(#goldGradCircle)" letter-spacing="4">
+    <!-- NAMAHAA Main Text with Normal Letters -->
+    <text y="5" font-family="'Outfit', 'Montserrat', sans-serif" font-size="28" font-weight="900" fill="url(#goldGradCircle)" letter-spacing="4">
       NAMAHAA
     </text>
 
