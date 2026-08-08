@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { NamahaLogo } from './NamahaLogo';
-import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon } from 'lucide-react';
+import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 import { useTheme } from '@/lib/theme';
+import { useCart } from '@/lib/cartContext';
 
 interface NavbarProps {
   selectedTable: number | null;
@@ -22,6 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [restaurantName, setRestaurantName] = useState('Namahaa Tiffin Room');
   const { theme, toggleTheme } = useTheme();
+  const { wishlist, openWishlist } = useCart();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -70,12 +72,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Table Badge */}
             <button
               onClick={onOpenTableSelector}
+              data-open-table-modal="true"
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-namaha-gold/15 dark:bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold hover:bg-namaha-gold hover:text-namaha-green-deep transition-all duration-300 shadow-sm"
               title="Click to change your table"
             >
               <Utensils className="w-3.5 h-3.5" />
               <span>{selectedTable ? `Table #${selectedTable}` : 'Select Table'}</span>
               <span className="text-[10px] bg-namaha-gold/30 px-1.5 py-0.5 rounded text-namaha-green-deep dark:text-white font-bold">Change</span>
+            </button>
+
+            {/* Wishlist Button */}
+            <button
+              onClick={openWishlist}
+              className="relative p-2 rounded-full bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition-all shadow-sm border border-amber-300/40 dark:border-white/10"
+              aria-label="View Saved Wishlist"
+              title="Saved Wishlist"
+            >
+              <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'fill-red-500 text-red-500' : ''}`} />
+              {wishlist.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white font-bold text-[9px] flex items-center justify-center shadow">
+                  {wishlist.length}
+                </span>
+              )}
             </button>
 
             {/* Quick Search */}
@@ -123,6 +141,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile Right Controls */}
           <div className="flex md:hidden items-center gap-2">
             
+            {/* Wishlist Mobile */}
+            <button
+              onClick={openWishlist}
+              className="relative p-1.5 rounded-full bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 border border-amber-300/40 dark:border-white/10"
+              aria-label="Saved Wishlist"
+            >
+              <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'fill-red-500 text-red-500' : ''}`} />
+              {wishlist.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white font-bold text-[8px] flex items-center justify-center">
+                  {wishlist.length}
+                </span>
+              )}
+            </button>
+
             {/* Theme Switcher Mobile */}
             <button
               onClick={toggleTheme}
@@ -135,6 +167,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Table Badge Mobile */}
             <button
               onClick={onOpenTableSelector}
+              data-open-table-modal="true"
               className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold"
             >
               <Utensils className="w-3.5 h-3.5" />

@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { MenuItem } from '@/types';
-import { X, Clock, Award, Star, Flame, CheckCircle2, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Clock, Award, Star, Flame, CheckCircle2, Sparkles, AlertCircle, Plus, Minus, Heart } from 'lucide-react';
 import { getFreshImageUrl } from '@/lib/imageUtils';
+import { useCart } from '@/lib/cartContext';
 
 interface FoodDetailModalProps {
   item: MenuItem | null;
@@ -13,6 +14,7 @@ interface FoodDetailModalProps {
 
 export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose }) => {
   const [imgSrc, setImgSrc] = useState<string>(item ? getFreshImageUrl(item.image) : '');
+  const { addToCart, removeFromCart, getItemQuantity, toggleWishlist, isInWishlist } = useCart();
 
   useEffect(() => {
     if (item) {
@@ -22,8 +24,11 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
 
   if (!item) return null;
 
+  const quantity = getItemQuantity(item.id);
+  const inWishlist = isInWishlist(item.id);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 dark:bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="relative w-full max-w-xl bg-white dark:bg-namaha-green-dark border-2 border-amber-500/40 dark:border-namaha-gold/40 rounded-3xl overflow-hidden shadow-2xl text-slate-800 dark:text-white my-auto max-h-[90vh] flex flex-col">
         
         {/* Close Button */}
@@ -52,10 +57,10 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
             className="object-cover"
             priority
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 dark:from-namaha-green-dark via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 dark:from-namaha-green-dark via-transparent to-transparent" />
 
           {/* Badges Floating on Image */}
-          <div className="absolute top-4 left-4 flex flex-wrap gap-2">
+          <div className="absolute top-4 left-4 flex flex-wrap gap-2 z-10">
             <div className="bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-md border border-emerald-600 flex items-center gap-1.5 shadow-md">
               <div className="w-3.5 h-3.5 border-2 border-emerald-600 flex items-center justify-center p-0.5">
                 <div className="w-2 h-2 rounded-full bg-emerald-600" />
@@ -64,7 +69,18 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
             </div>
           </div>
 
-          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
+          {/* Wishlist Button on Modal Image */}
+          <button
+            type="button"
+            onClick={() => toggleWishlist(item)}
+            className="absolute top-4 right-16 z-20 p-2.5 rounded-full bg-slate-900/70 hover:bg-slate-900 text-white border border-white/20 shadow-lg transition active:scale-90"
+            aria-label="Toggle Wishlist"
+            title={inWishlist ? 'Remove from wishlist' : 'Save to wishlist'}
+          >
+            <Heart className={`w-4 h-4 ${inWishlist ? 'fill-red-500 text-red-500' : 'text-white'}`} />
+          </button>
+
+          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between z-10">
             <div>
               <span className="text-xs font-bold text-amber-300 dark:text-namaha-gold uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-md border border-white/20">
                 {item.categoryName}
@@ -114,7 +130,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
           </div>
 
           {/* Tags */}
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             {item.isPopular && (
               <span className="px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-1">
                 <Star className="w-3.5 h-3.5 fill-amber-500 dark:fill-amber-300" /> Customer Favorite
@@ -132,7 +148,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
             )}
           </div>
 
-          {/* Ingredients if present */}
+          {/* Key Ingredients */}
           {item.ingredients && item.ingredients.length > 0 && (
             <div className="pt-2">
               <h3 className="text-xs font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-2">
@@ -160,10 +176,51 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
           )}
         </div>
 
-        {/* Modal Footer Note */}
-        <div className="p-4 bg-slate-50 dark:bg-black/40 border-t border-slate-200 dark:border-white/10 text-center text-xs text-slate-500 dark:text-gray-400 flex items-center justify-between font-medium">
-          <span>Namahaa Digital Menu System</span>
-          <span className="text-amber-700 dark:text-namaha-gold font-bold">Table QR Session Active</span>
+        {/* Modal Bottom Cart Bar */}
+        <div className="p-4 bg-slate-50 dark:bg-namaha-green-deep border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-3">
+          <div>
+            <span className="text-xs text-gray-400 block">Item Price</span>
+            <span className="text-xl font-extrabold text-namaha-gold font-sans">₹{item.price}</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {!item.isAvailable ? (
+              <span className="px-5 py-2.5 rounded-2xl bg-red-950 text-red-400 font-bold text-xs border border-red-500/30">
+                Unavailable
+              </span>
+            ) : quantity === 0 ? (
+              <button
+                type="button"
+                onClick={() => addToCart(item)}
+                className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-namaha-green-deep font-extrabold text-xs sm:text-sm shadow-md flex items-center gap-1.5 transition active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add to Cart</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-black/40 border border-white/20 rounded-2xl p-1 shadow">
+                <button
+                  type="button"
+                  onClick={() => removeFromCart(item.id)}
+                  className="w-8 h-8 rounded-xl bg-white/10 hover:bg-red-900/80 text-white flex items-center justify-center text-xs font-black transition active:scale-90"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+
+                <span className="w-7 text-center font-sans font-extrabold text-sm text-white">
+                  {quantity}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => addToCart(item)}
+                  className="w-8 h-8 rounded-xl bg-namaha-gold hover:bg-amber-400 text-namaha-green-deep flex items-center justify-center text-xs font-black transition active:scale-90"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

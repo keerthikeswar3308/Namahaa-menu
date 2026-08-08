@@ -15,9 +15,13 @@ import { GallerySection } from '@/components/GallerySection';
 import { ContactSection } from '@/components/ContactSection';
 import { Footer } from '@/components/Footer';
 import { MobileQuickBar } from '@/components/MobileQuickBar';
+import { CartProvider, useCart } from '@/lib/cartContext';
+import { FloatingCartBar } from '@/components/FloatingCartBar';
+import { CartBottomSheet } from '@/components/CartBottomSheet';
+import { WishlistModal } from '@/components/WishlistModal';
 import { Star, UtensilsCrossed } from 'lucide-react';
 
-export default function HomePage() {
+function HomeContent() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -30,6 +34,8 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedFoodItem, setSelectedFoodItem] = useState<MenuItem | null>(null);
+
+  const { totalCount } = useCart();
 
   const refreshAllData = () => {
     setMenuItems(NamahaStore.getMenuItems());
@@ -150,7 +156,11 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-namaha-green-cream dark:bg-namaha-green-deep text-slate-800 dark:text-white flex flex-col justify-between transition-colors duration-300 pb-16 md:pb-0">
+    <div
+      className={`min-h-screen bg-namaha-green-cream dark:bg-namaha-green-deep text-slate-800 dark:text-white flex flex-col justify-between transition-colors duration-300 ${
+        totalCount > 0 ? 'pb-32 sm:pb-28' : 'pb-16 md:pb-0'
+      }`}
+    >
       
       {/* 1. Fixed Navbar */}
       <Navbar
@@ -286,7 +296,16 @@ export default function HomePage() {
       {/* 10. Footer */}
       <Footer info={restaurantInfo} />
 
-      {/* 11. Mobile Bottom Floating Quick Bar */}
+      {/* 11. Floating Cart Bar (appears after at least 1 item added) */}
+      <FloatingCartBar />
+
+      {/* 12. Cart Bottom Sheet Drawer */}
+      <CartBottomSheet />
+
+      {/* 13. Wishlist Modal */}
+      <WishlistModal />
+
+      {/* 14. Mobile Bottom Floating Quick Bar */}
       <MobileQuickBar
         selectedTable={selectedTable}
         onOpenTableSelector={() => setIsTableModalOpen(true)}
@@ -294,5 +313,15 @@ export default function HomePage() {
       />
 
     </div>
+  );
+}
+
+export default function HomePage() {
+  const initialItems = useMemo(() => NamahaStore.getMenuItems(), []);
+
+  return (
+    <CartProvider allMenuItems={initialItems}>
+      <HomeContent />
+    </CartProvider>
   );
 }
