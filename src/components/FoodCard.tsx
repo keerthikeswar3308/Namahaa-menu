@@ -67,10 +67,10 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
         />
 
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/75 dark:from-namaha-green-deep/90 via-transparent to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/75 dark:from-namaha-green-deep/90 via-transparent to-black/20 pointer-events-none" />
 
         {/* Veg Badge Top Left */}
-        <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md p-1 rounded-md border border-emerald-600 flex items-center justify-center shadow-md z-10">
+        <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md p-1 rounded-md border border-emerald-600 flex items-center justify-center shadow-md z-10 pointer-events-none">
           <div className="w-3.5 h-3.5 border-2 border-emerald-600 flex items-center justify-center p-0.5">
             <div className="w-2 h-2 rounded-full bg-emerald-600" />
           </div>
@@ -80,7 +80,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
         <button
           type="button"
           onClick={handleWishlistClick}
-          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:text-red-400 border border-white/20 shadow-md transition active:scale-90"
+          className="absolute top-3 right-3 z-20 p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:text-red-400 border border-white/20 shadow-md transition active:scale-90"
           aria-label={inWishlist ? `Remove ${item.name} from wishlist` : `Add ${item.name} to wishlist`}
           title={inWishlist ? 'Remove from wishlist' : 'Save to wishlist'}
         >
@@ -89,14 +89,14 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
 
         {/* Preparation Time Badge */}
         {item.preparationTime && (
-          <div className="absolute top-11 right-3 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] text-gray-100 font-medium flex items-center gap-1 border border-white/15 z-10">
+          <div className="absolute top-11 right-3 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] text-gray-100 font-medium flex items-center gap-1 border border-white/15 z-10 pointer-events-none">
             <Clock className="w-2.5 h-2.5 text-amber-400 dark:text-namaha-gold" />
             <span>{item.preparationTime}</span>
           </div>
         )}
 
-        {/* Special Badges Row */}
-        <div className="absolute bottom-3 left-3 flex flex-wrap gap-1 z-10">
+        {/* Special Badges Row (Bottom Left of Image) */}
+        <div className="absolute bottom-3 left-3 flex flex-wrap gap-1 z-10 pointer-events-none">
           {item.isPopular && (
             <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white dark:text-namaha-green-deep font-bold text-[9px] uppercase tracking-wider flex items-center gap-0.5 shadow-md">
               <Star className="w-2.5 h-2.5 fill-white dark:fill-namaha-green-deep" /> Popular
@@ -114,8 +114,8 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
           )}
         </div>
 
-        {/* Add Button / Stepper Controls at Bottom Right of Food Image */}
-        <div className="absolute bottom-3 right-3 z-10">
+        {/* High-Contrast Add Button / Stepper Controls at Bottom Right of Food Image */}
+        <div className="absolute bottom-3 right-3 z-20">
           {!item.isAvailable ? (
             <span className="px-3 py-1.5 rounded-xl bg-red-950/90 text-red-300 font-bold text-xs uppercase tracking-wider border border-red-500/30 shadow-md">
               Unavailable
@@ -124,37 +124,37 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
             <button
               type="button"
               onClick={handleAddClick}
-              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-namaha-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-namaha-green-deep font-extrabold text-xs shadow-lg flex items-center gap-1 transition-all duration-200 active:scale-95 border border-white/20"
+              className="px-4 py-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 dark:bg-namaha-gold dark:text-namaha-green-deep dark:hover:bg-amber-400 font-extrabold text-xs shadow-2xl flex items-center gap-1.5 transition-all duration-200 hover:scale-105 active:scale-95 border-2 border-emerald-600 dark:border-white/30"
               aria-label={`Add ${item.name} to cart`}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add</span>
+              <Plus className="w-4 h-4 text-emerald-700 dark:text-namaha-green-deep stroke-[3]" />
+              <span className="font-sans font-bold tracking-wide">ADD</span>
             </button>
           ) : (
             <div
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 bg-namaha-green-deep/95 dark:bg-namaha-green-dark/95 border-2 border-namaha-gold rounded-xl p-1 shadow-2xl backdrop-blur-md animate-scale-up"
+              className="flex items-center gap-1.5 bg-white dark:bg-namaha-green-dark border-2 border-emerald-600 dark:border-namaha-gold rounded-xl p-1 shadow-2xl backdrop-blur-md animate-scale-up"
             >
               <button
                 type="button"
                 onClick={handleMinusClick}
-                className="w-6 h-6 rounded-lg bg-white/15 hover:bg-red-900/80 text-white flex items-center justify-center text-xs font-black transition active:scale-90"
+                className="w-7 h-7 rounded-lg bg-emerald-100 hover:bg-red-100 text-emerald-800 hover:text-red-700 dark:bg-white/15 dark:hover:bg-red-900/80 dark:text-white flex items-center justify-center text-xs font-black transition active:scale-90"
                 aria-label={`Decrease ${item.name} quantity`}
               >
-                <Minus className="w-3 h-3" />
+                <Minus className="w-3.5 h-3.5 stroke-[3]" />
               </button>
 
-              <span className="w-5 text-center font-sans font-extrabold text-xs text-white">
+              <span className="w-6 text-center font-sans font-extrabold text-sm text-emerald-950 dark:text-white">
                 {quantity}
               </span>
 
               <button
                 type="button"
                 onClick={handlePlusClick}
-                className="w-6 h-6 rounded-lg bg-namaha-gold hover:bg-amber-400 text-namaha-green-deep flex items-center justify-center text-xs font-black transition active:scale-90 shadow-sm"
+                className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-namaha-gold dark:hover:bg-amber-400 dark:text-namaha-green-deep flex items-center justify-center text-xs font-black transition active:scale-90 shadow-sm"
                 aria-label={`Increase ${item.name} quantity`}
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
               </button>
             </div>
           )}
@@ -162,7 +162,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
 
         {/* Out of Stock Overlay */}
         {!item.isAvailable && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-0">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-10 pointer-events-none">
             <span className="px-3 py-1 rounded-full bg-red-600 text-white font-bold text-[11px] uppercase tracking-wider border border-white/20 shadow-md">
               Out of Stock
             </span>

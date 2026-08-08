@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { NamahaLogo } from './NamahaLogo';
-import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart } from 'lucide-react';
+import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart, ShoppingBag } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 import { useTheme } from '@/lib/theme';
 import { useCart } from '@/lib/cartContext';
@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [restaurantName, setRestaurantName] = useState('Namahaa Tiffin Room');
   const { theme, toggleTheme } = useTheme();
-  const { wishlist, openWishlist } = useCart();
+  const { wishlist, openWishlist, totalCount, openCart } = useCart();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -67,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </Link>
 
           {/* Desktop Right Actions */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3.5">
             
             {/* Table Badge */}
             <button
@@ -79,6 +79,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Utensils className="w-3.5 h-3.5" />
               <span>{selectedTable ? `Table #${selectedTable}` : 'Select Table'}</span>
               <span className="text-[10px] bg-namaha-gold/30 px-1.5 py-0.5 rounded text-namaha-green-deep dark:text-white font-bold">Change</span>
+            </button>
+
+            {/* Top Cart Button */}
+            <button
+              onClick={openCart}
+              className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm border ${
+                totalCount > 0
+                  ? 'bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep border-amber-400 font-extrabold scale-102'
+                  : 'bg-emerald-50 dark:bg-white/10 text-slate-700 dark:text-gray-200 hover:bg-emerald-100 dark:hover:bg-white/20 border-emerald-900/10 dark:border-white/10'
+              }`}
+              aria-label="Open Shopping Cart"
+              title="Your Food Cart"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>Cart</span>
+              {totalCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-namaha-green-deep text-namaha-gold font-extrabold text-[10px]">
+                  {totalCount}
+                </span>
+              )}
             </button>
 
             {/* Wishlist Button */}
@@ -108,7 +128,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             {/* Nav Links */}
-            <nav className="flex items-center gap-5 text-sm font-bold text-slate-700 dark:text-gray-200">
+            <nav className="flex items-center gap-4 text-sm font-bold text-slate-700 dark:text-gray-200">
               <Link href="#menu" className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
                 Menu
               </Link>
@@ -141,6 +161,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile Right Controls */}
           <div className="flex md:hidden items-center gap-2">
             
+            {/* Mobile Cart Button */}
+            <button
+              onClick={openCart}
+              className={`relative p-1.5 rounded-full border transition-all ${
+                totalCount > 0
+                  ? 'bg-namaha-gold text-namaha-green-deep border-amber-400 font-bold'
+                  : 'bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 border-amber-300/40 dark:border-white/10'
+              }`}
+              aria-label="View Cart"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              {totalCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white font-bold text-[8px] flex items-center justify-center">
+                  {totalCount}
+                </span>
+              )}
+            </button>
+
             {/* Wishlist Mobile */}
             <button
               onClick={openWishlist}
@@ -202,6 +240,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             <nav className="flex flex-col gap-2.5 text-sm font-bold text-slate-800 dark:text-gray-200 pt-2 border-t border-slate-200 dark:border-white/10">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openCart();
+                }}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm flex items-center justify-between text-left"
+              >
+                <span>🛒 View Cart</span>
+                <span className="font-sans font-bold text-namaha-gold">({totalCount} items)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openWishlist();
+                }}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm flex items-center justify-between text-left"
+              >
+                <span>❤️ Saved Wishlist</span>
+                <span className="font-sans font-bold text-red-400">({wishlist.length})</span>
+              </button>
+
               <Link
                 href="#menu"
                 onClick={() => setMobileMenuOpen(false)}
