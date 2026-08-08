@@ -1,0 +1,63 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminSessionToken, verifyAdminPasscode } from '@/lib/authServer';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { passcode } = body as { passcode?: string };
+
+    if (!passcode || typeof passcode !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Passcode is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!verifyAdminPasscode(passcode)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid admin passcode' },
+        { status: 401 }
+      );
+    }
+
+    const token = createAdminSessionToken();
+
+    const response = NextResponse.json({
+      success: true,
+      message: 'Admin authenticated successfully',
+      token,
+    });
+
+    // Set secure session cookie
+    response.cookies.set('namahaa_admin_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60, // 30 days
+    });
+
+    return response;
+  } catch (err: any) {
+    console.error('API /api/admin/auth exception:', err);
+    return NextResponse.json(
+      { success: false, error: err.message || 'Authentication error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE() {
+  const response = NextResponse.json({
+    success: true,
+    message: 'Admin logged out successfully',
+  });
+
+  response.cookies.delete('namahaa_admin_token');
+  response.cookies.delete('namahaa_admin_auth');
+
+  return response;
+}

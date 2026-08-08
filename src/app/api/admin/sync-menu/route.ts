@@ -1,29 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
-import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
+import { verifyAdminRequest } from '@/lib/authServer';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-const VALID_PASSCODES = ['namahaa2026', 'admin', 'namahaa'];
-
-function isAuthorizedAdmin(request: NextRequest): boolean {
-  const passcode =
-    request.headers.get('x-admin-passcode') ||
-    request.headers.get('x-admin-auth') ||
-    request.cookies.get('namahaa_admin_auth')?.value;
-  if (!passcode) return true; // Allow admin portal API calls
-  return Boolean(
-    passcode === 'true' ||
-      VALID_PASSCODES.includes(passcode.trim().toLowerCase())
-  );
-}
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isAuthorizedAdmin(request)) {
+    // 1. Strict Server-Side Authentication Verification
+    const isAuthorized = verifyAdminRequest(request);
+    if (!isAuthorized) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized: Valid Admin passcode required' },
+        {
+          success: false,
+          error: 'Unauthorized: Valid Admin passcode or session token required',
+        },
         { status: 401 }
       );
     }
@@ -34,35 +24,61 @@ export async function POST(request: NextRequest) {
       categories,
       restaurantInfo,
       gallery,
-      mode,
+      mode = 'merge',
       deleteItemId,
       deleteCategoryId,
       deleteGalleryId,
-    } = body as {
-      items?: MenuItem[];
-      categories?: Category[];
-      restaurantInfo?: Partial<RestaurantInfo>;
-      gallery?: GalleryImage[];
-      mode?: 'replace' | 'merge';
-      deleteItemId?: string;
-      deleteCategoryId?: string;
-      deleteGalleryId?: string;
-    };
+    } = body;
 
-    // 1. Delete specific records if requested
+    // 2. Handle Individual Record Deletions
     if (deleteItemId) {
-      await supabaseAdmin.from('menu_items').delete().eq('id', deleteItemId);
-    }
-    if (deleteCategoryId) {
-      await supabaseAdmin.from('categories').delete().eq('id', deleteCategoryId);
-    }
-    if (deleteGalleryId) {
-      await supabaseAdmin.from('gallery').delete().eq('id', deleteGalleryId);
+      const { error: delItemErr } = await supabaseAdmin
+        .from('menu_items')
+        .delete()
+        .eq('id', deleteItemId);
+
+      if (delItemErr) {
+        console.error('Supabase delete item error:', delItemErr);
+        return NextResponse.json(
+          { success: false, error: `Failed to delete menu item: ${delItemErr.message}` },
+          { status: 500 }
+        );
+      }
     }
 
-    // 2. Sync Categories (Categories must be saved before items for Foreign Key validity)
+    if (deleteCategoryId) {
+      const { error: delCatErr } = await supabaseAdmin
+        .from('categories')
+        .delete()
+        .eq('id', deleteCategoryId);
+
+      if (delCatErr) {
+        console.error('Supabase delete category error:', delCatErr);
+        return NextResponse.json(
+          { success: false, error: `Failed to delete category: ${delCatErr.message}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (deleteGalleryId) {
+      const { error: delGalErr } = await supabaseAdmin
+        .from('gallery')
+        .delete()
+        .eq('id', deleteGalleryId);
+
+      if (delGalErr) {
+        console.error('Supabase delete gallery error:', delGalErr);
+        return NextResponse.json(
+          { success: false, error: `Failed to delete gallery image: ${delGalErr.message}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 3. Sync Categories first (Categories must exist before items for Foreign Key validity)
     if (categories && categories.length > 0) {
-      const catPayload = categories.map((c, idx) => ({
+      const catPayload = categories.map((c: any, idx: number) => ({
         id: c.id,
         name: c.name,
         description: c.description || '',
@@ -73,40 +89,58 @@ export async function POST(request: NextRequest) {
 
       const { error: catError } = await supabaseAdmin
         .from('categories')
-        .upsert(catPayload);
+        .upsert(catPayload, { onConflict: 'id' });
 
       if (catError) {
-        console.error('Server categories sync error:', catError);
+        console.error('Supabase categories sync error:', catError);
+        return NextResponse.json(
+          { success: false, error: `Failed to sync categories to Supabase: ${catError.message}` },
+          { status: 500 }
+        );
       }
     }
 
-    // 3. Sync Menu Items
+    // 4. Sync Menu Items
     if (items && items.length > 0) {
       if (mode === 'replace') {
-        const { data: existingRows } = await supabaseAdmin
+        const { data: existingRows, error: fetchErr } = await supabaseAdmin
           .from('menu_items')
           .select('id');
-        const newIds = new Set(items.map((i) => i.id));
-        const idsToDelete =
-          existingRows?.map((r) => r.id).filter((id) => !newIds.has(id)) || [];
 
-        if (idsToDelete.length > 0) {
-          await supabaseAdmin.from('menu_items').delete().in('id', idsToDelete);
+        if (fetchErr) {
+          console.error('Supabase fetch existing items error:', fetchErr);
+        } else if (existingRows && existingRows.length > 0) {
+          const newIds = new Set(items.map((i: any) => i.id));
+          const idsToDelete = existingRows.map((r) => r.id).filter((id) => !newIds.has(id));
+
+          if (idsToDelete.length > 0) {
+            const { error: batchDelErr } = await supabaseAdmin
+              .from('menu_items')
+              .delete()
+              .in('id', idsToDelete);
+
+            if (batchDelErr) {
+              console.error('Supabase batch delete stale items error:', batchDelErr);
+              return NextResponse.json(
+                { success: false, error: `Failed to remove deleted items: ${batchDelErr.message}` },
+                { status: 500 }
+              );
+            }
+          }
         }
       }
 
       const batchSize = 25;
       for (let i = 0; i < items.length; i += batchSize) {
         const batch = items.slice(i, i + batchSize);
-        const itemPayload = batch.map((item, idx) => ({
+        const itemPayload = batch.map((item: any, idx: number) => ({
           id: item.id,
           name: item.name,
           description: item.description || '',
           price: Number(item.price),
           category_id: item.categoryId || null,
-          category_name: item.categoryName,
-          image: item.image,
-          image_url: item.image,
+          category_name: item.categoryName || '',
+          image: item.image || item.imageUrl || '',
           is_veg: item.isVeg !== false,
           preparation_time: item.preparationTime || '10 mins',
           is_available: item.isAvailable !== false,
@@ -120,51 +154,75 @@ export async function POST(request: NextRequest) {
 
         const { error: itemError } = await supabaseAdmin
           .from('menu_items')
-          .upsert(itemPayload);
+          .upsert(itemPayload, { onConflict: 'id' });
 
         if (itemError) {
-          console.error(`Server batch ${i} error:`, itemError);
+          console.error(`Supabase menu items batch ${i / batchSize + 1} sync error:`, itemError);
           return NextResponse.json(
-            { success: false, error: itemError.message },
+            {
+              success: false,
+              error: `Failed to sync menu items batch ${i + 1}-${Math.min(i + batchSize, items.length)}: ${itemError.message}`,
+            },
             { status: 500 }
           );
         }
       }
-    }
+    } else if (items && items.length === 0 && mode === 'replace') {
+      // Clear all items if explicitly requested in replace mode
+      const { error: clearErr } = await supabaseAdmin
+        .from('menu_items')
+        .delete()
+        .neq('id', '___none___');
 
-    // 4. Sync Restaurant Info
-    if (restaurantInfo) {
-      const { error: infoError } = await supabaseAdmin
-        .from('restaurant_info')
-        .upsert({
-          id: 1,
-          name: restaurantInfo.name,
-          tagline: restaurantInfo.tagline,
-          description: restaurantInfo.description,
-          logo_url: restaurantInfo.logoUrl,
-          banner_url: restaurantInfo.bannerUrl,
-          phone: restaurantInfo.phone,
-          email: restaurantInfo.email,
-          address: restaurantInfo.address,
-          google_maps_url: restaurantInfo.googleMapsUrl,
-          instagram_url: restaurantInfo.instagramUrl,
-          facebook_url: restaurantInfo.facebookUrl,
-          opening_hours: restaurantInfo.openingHours,
-          hero_title: restaurantInfo.heroTitle,
-          hero_subtitle: restaurantInfo.heroSubtitle,
-          announcement_text: restaurantInfo.announcementText,
-          is_restaurant_open: restaurantInfo.isRestaurantOpen,
-          copyright_text: restaurantInfo.copyrightText,
-        });
-
-      if (infoError) {
-        console.error('Server restaurant info sync error:', infoError);
+      if (clearErr) {
+        console.error('Supabase clear items error:', clearErr);
+        return NextResponse.json(
+          { success: false, error: `Failed to clear menu items: ${clearErr.message}` },
+          { status: 500 }
+        );
       }
     }
 
-    // 5. Sync Gallery
+    // 5. Sync Restaurant Info
+    if (restaurantInfo) {
+      const infoPayload = {
+        id: 1,
+        name: restaurantInfo.name || 'Namahaa Tiffin Room',
+        tagline: restaurantInfo.tagline || '',
+        description: restaurantInfo.description || '',
+        logo_url: restaurantInfo.logoUrl || '',
+        banner_url: restaurantInfo.bannerUrl || '',
+        phone: restaurantInfo.phone || '',
+        email: restaurantInfo.email || '',
+        address: restaurantInfo.address || '',
+        google_maps_url: restaurantInfo.googleMapsUrl || '',
+        instagram_url: restaurantInfo.instagramUrl || '',
+        facebook_url: restaurantInfo.facebookUrl || '',
+        opening_hours: restaurantInfo.openingHours || null,
+        hero_title: restaurantInfo.heroTitle || '',
+        hero_subtitle: restaurantInfo.heroSubtitle || '',
+        announcement_text: restaurantInfo.announcementText || '',
+        is_restaurant_open: restaurantInfo.isRestaurantOpen ?? true,
+        copyright_text: restaurantInfo.copyrightText || '',
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: infoError } = await supabaseAdmin
+        .from('restaurant_info')
+        .upsert(infoPayload, { onConflict: 'id' });
+
+      if (infoError) {
+        console.error('Supabase restaurant_info sync error:', infoError);
+        return NextResponse.json(
+          { success: false, error: `Failed to sync restaurant info to Supabase: ${infoError.message}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 6. Sync Gallery
     if (gallery && gallery.length > 0) {
-      const galPayload = gallery.map((g) => ({
+      const galPayload = gallery.map((g: any) => ({
         id: g.id,
         url: g.url,
         title: g.title,
@@ -174,10 +232,14 @@ export async function POST(request: NextRequest) {
 
       const { error: galError } = await supabaseAdmin
         .from('gallery')
-        .upsert(galPayload);
+        .upsert(galPayload, { onConflict: 'id' });
 
       if (galError) {
-        console.error('Server gallery sync error:', galError);
+        console.error('Supabase gallery sync error:', galError);
+        return NextResponse.json(
+          { success: false, error: `Failed to sync gallery to Supabase: ${galError.message}` },
+          { status: 500 }
+        );
       }
     }
 
@@ -186,10 +248,10 @@ export async function POST(request: NextRequest) {
       message: 'Data successfully synchronized with Supabase database',
       timestamp: Date.now(),
     });
-  } catch (err: any) {
-    console.error('API /api/admin/sync-menu exception:', err);
+  } catch (error: any) {
+    console.error('Admin sync-menu unhandled exception:', error);
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: error.message || 'Internal Server Error during Supabase sync' },
       { status: 500 }
     );
   }

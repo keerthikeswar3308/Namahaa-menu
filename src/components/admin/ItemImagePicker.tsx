@@ -20,7 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { isSupabaseConfigured, uploadImageViaAdminApi } from '@/lib/supabase';
-import { compressImageFile, compressImageToBlob, isValidImageUrl, getFreshImageUrl } from '@/lib/imageUtils';
+import { compressImageToBlob, isValidImageUrl, getFreshImageUrl } from '@/lib/imageUtils';
 
 interface ItemImagePickerProps {
   currentUrl: string;
@@ -29,13 +29,14 @@ interface ItemImagePickerProps {
   label?: string;
 }
 
-// Preset South Indian Dish Food Photos for Instant Search & Import
+// Preset Curated South Indian Food Photos for Admin Search & Direct Import into Supabase Storage
 const CURATED_FOOD_SEARCH_DATABASE: Record<string, Array<{ name: string; url: string }>> = {
   dosa: [
     { name: 'Crispy Davanagere Benne Dosa', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
     { name: 'Paper Masala Dosa', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80' },
     { name: 'Pesarattu Moong Dosa', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
-    { name: 'Ghee Roast Dosa', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
+    { name: 'Ravva Dosa', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
+    { name: 'Millet Dosa', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80' },
   ],
   idli: [
     { name: 'Steamed Thatte Idli & Podi', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80' },
@@ -54,6 +55,9 @@ const CURATED_FOOD_SEARCH_DATABASE: Record<string, Array<{ name: string; url: st
   pongal: [
     { name: 'Ghee Khara Pongal', url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80' },
     { name: 'Sweet Sakkarai Pongal', url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80' },
+  ],
+  parota: [
+    { name: 'Malabar Parota / Kothu Parota', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
   ],
   poori: [
     { name: 'Fluffy Poori Sagu', url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80' },
@@ -109,7 +113,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     }
   };
 
-  // --- 1. DEVICE UPLOAD & DRAG/DROP HANDLER ---
+  // --- 1. DEVICE UPLOAD (LAPTOP / DESKTOP / MOBILE GALLERY) ---
   const processUploadedFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setStatus('error', 'Please select a valid image file (JPEG, PNG, WEBP).');
@@ -117,17 +121,17 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     }
 
     setIsUploading(true);
-    setStatus('info', 'Compressing & uploading image to Supabase Storage...');
+    setStatus('info', 'Compressing & uploading image to Supabase Storage (food-images)...');
 
     try {
       // Compress client-side for rapid transmission
-      const compressedBlob = await compressImageToBlob(file, 900, 900, 0.8);
+      const compressedBlob = await compressImageToBlob(file, 1000, 1000, 0.85);
       
       const { publicUrl, error } = await uploadImageViaAdminApi(compressedBlob, file.name);
       if (publicUrl) {
         const freshUrl = getFreshImageUrl(publicUrl);
         onChangeUrl(freshUrl);
-        setStatus('success', 'Image uploaded & saved directly in Supabase Storage (food-menu-images)! Visible to all devices!');
+        setStatus('success', 'Image uploaded & saved directly in Supabase Storage (food-images)!');
       } else {
         console.error('Server Upload Error:', error);
         setStatus('error', `Upload Failed: ${error?.message || 'Server storage upload error'}`);
@@ -205,14 +209,14 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       setIsUploading(true);
-      setStatus('info', 'Uploading captured dish photo to Supabase Storage (food-menu-images)...');
+      setStatus('info', 'Uploading captured dish photo to Supabase Storage (food-images)...');
 
       try {
         const { publicUrl, error } = await uploadImageViaAdminApi(blob, `camera-${Date.now()}.jpg`);
         if (publicUrl) {
           const freshUrl = getFreshImageUrl(publicUrl);
           onChangeUrl(freshUrl);
-          setStatus('success', 'Captured dish photo uploaded to Supabase Storage (food-menu-images)!');
+          setStatus('success', 'Captured dish photo uploaded to Supabase Storage (food-images)!');
         } else {
           setStatus('error', `Camera Upload Failed: ${error?.message || 'Could not upload photo'}`);
         }
@@ -221,7 +225,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
       } finally {
         setIsUploading(false);
       }
-    }, 'image/jpeg', 0.8);
+    }, 'image/jpeg', 0.85);
   };
 
   // --- 3. PASTE IMAGE URL HANDLER ---
@@ -239,7 +243,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
     }
 
     setIsUploading(true);
-    setStatus('info', 'Server downloading external image & saving to Supabase Storage (food-menu-images)...');
+    setStatus('info', 'Server downloading external image & saving to Supabase Storage (food-images)...');
 
     try {
       const { publicUrl, error } = await uploadImageViaAdminApi(urlInput.trim(), `url-${Date.now()}.jpg`);
@@ -285,14 +289,14 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
 
   const handleSelectSearchResult = async (item: { name: string; url: string }) => {
     setIsUploading(true);
-    setStatus('info', `Server downloading & importing "${item.name}" into Supabase Storage (food-menu-images)...`);
+    setStatus('info', `Server downloading & importing "${item.name}" into Supabase Storage (food-images)...`);
 
     try {
       const { publicUrl, error } = await uploadImageViaAdminApi(item.url, `${item.name.replace(/\s+/g, '-').toLowerCase()}.jpg`);
       if (publicUrl) {
         const freshUrl = getFreshImageUrl(publicUrl);
         onChangeUrl(freshUrl);
-        setStatus('success', `Imported "${item.name}" directly to Supabase Storage (food-menu-images)!`);
+        setStatus('success', `Imported "${item.name}" directly to Supabase Storage (food-images)!`);
       } else {
         setStatus('error', `Search Import Failed: ${error?.message || 'Could not import food photo'}`);
       }
@@ -316,7 +320,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
             <span>{label}</span>
           </label>
           <p className="text-[11px] text-gray-400">
-            Stored in Supabase Cloud Storage & synced to live customer site.
+            Stored in Supabase Cloud Storage (food-images) & synced to live customer site.
           </p>
         </div>
 
@@ -453,7 +457,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
           </button>
 
           <p className="text-[11px] text-gray-300 font-medium mt-1">
-            Or drag & drop photo here. Auto-compressed & stored in Supabase Storage.
+            Or drag & drop photo here. Auto-compressed & stored in Supabase Storage (food-images).
           </p>
         </div>
       )}
@@ -490,7 +494,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
             </button>
           </div>
           <p className="text-[11px] text-gray-400">
-            Take a live photo of cooked dish. Automatically compressed & uploaded to Supabase.
+            Take a live photo of cooked dish. Automatically compressed & uploaded to Supabase (food-images).
           </p>
         </div>
       )}
@@ -536,7 +540,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
               type="url"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="Paste public image URL (Cloudinary, ImageKit, etc...)"
+              placeholder="Paste public image URL (https://...)"
               className="flex-1 px-3.5 py-2.5 bg-black/60 border border-white/20 rounded-xl text-xs text-white placeholder-gray-400 focus:border-namaha-gold focus:outline-none"
             />
             <button
@@ -554,7 +558,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
             </button>
           </div>
           <p className="text-[11px] text-gray-400">
-            Validates image URL & automatically imports a permanent copy into Supabase Storage.
+            Validates image URL & automatically imports a permanent copy into Supabase Storage (food-images).
           </p>
         </div>
       )}
@@ -564,7 +568,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
         <div className="space-y-3">
           {/* Quick Filter Tags */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-            {['Dosa', 'Idli', 'Vada', 'Coffee', 'Pongal', 'Poori'].map((tag) => (
+            {['Dosa', 'Idli', 'Vada', 'Coffee', 'Pongal', 'Parota', 'Poori'].map((tag) => (
               <button
                 key={tag}
                 type="button"
@@ -610,7 +614,7 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
       {/* Status Feedback Banner */}
       {uploadStatusMsg && (
         <div
-          className={`p-3.5 rounded-2xl text-xs font-semibold flex flex-col gap-1.5 animate-fade-in ${
+          className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center gap-2 animate-fade-in ${
             uploadStatusMsg.type === 'success'
               ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/40'
               : uploadStatusMsg.type === 'error'
@@ -618,24 +622,14 @@ export const ItemImagePicker: React.FC<ItemImagePickerProps> = ({
               : 'bg-amber-950/90 text-amber-300 border border-amber-500/40'
           }`}
         >
-          <div className="flex items-center gap-2">
-            {uploadStatusMsg.type === 'success' ? (
-              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            ) : uploadStatusMsg.type === 'error' ? (
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            ) : (
-              <Cloud className="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
-            )}
-            <span>{uploadStatusMsg.text}</span>
-          </div>
-
-          {uploadStatusMsg.text.toLowerCase().includes('bucket not found') && (
-            <div className="mt-2 p-3 bg-black/60 rounded-xl border border-red-500/40 text-[11px] text-gray-200 font-normal space-y-1">
-              <span className="font-bold text-namaha-gold block">⚡ Quick 1-Step Fix in Supabase:</span>
-              <p>1. Open your <strong>Supabase Dashboard</strong> at <a href="https://supabase.com/dashboard/project/rhnrcyzzqmqgqoigjmuu/storage/buckets" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">Storage &rarr; Buckets</a>.</p>
-              <p>2. Click <strong>&quot;New Bucket&quot;</strong>, enter name <strong><code className="text-emerald-400 bg-black/80 px-1.5 py-0.5 rounded">food-images</code></strong>, turn <strong>&quot;Public bucket&quot; ON</strong>, and click Save.</p>
-            </div>
+          {uploadStatusMsg.type === 'success' ? (
+            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          ) : uploadStatusMsg.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          ) : (
+            <Cloud className="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
           )}
+          <span>{uploadStatusMsg.text}</span>
         </div>
       )}
 

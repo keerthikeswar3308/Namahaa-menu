@@ -4,15 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Category, GalleryImage, MenuItem } from '@/types';
 import { ItemImagePicker } from './ItemImagePicker';
-import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X, AlertCircle } from 'lucide-react';
 
 interface MenuManagementProps {
   items: MenuItem[];
   categories: Category[];
   galleryImages?: GalleryImage[];
-  onSaveItem: (item: MenuItem | Omit<MenuItem, 'id'>) => void;
-  onDeleteItem: (id: string) => void;
-  onToggleStatus: (id: string, isAvailable: boolean) => void;
+  onSaveItem: (item: MenuItem | Omit<MenuItem, 'id'>) => Promise<void> | void;
+  onDeleteItem: (id: string) => Promise<void> | void;
+  onToggleStatus: (id: string, isAvailable: boolean) => Promise<void> | void;
 }
 
 export const MenuManagement: React.FC<MenuManagementProps> = ({
@@ -28,6 +28,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -40,7 +43,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
     price: 50,
     categoryId: categories[0]?.id || '',
     categoryName: categories[0]?.name || '',
-    image: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+    image: '',
     isVeg: true,
     preparationTime: '10 mins',
     isAvailable: true,
@@ -62,13 +65,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
   }, [isAddingNew, editingItem]);
 
   const handleOpenAdd = () => {
+    setSaveError(null);
     setFormData({
       name: '',
       description: '',
       price: 50,
       categoryId: categories[0]?.id || '',
       categoryName: categories[0]?.name || '',
-      image: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+      image: '',
       isVeg: true,
       preparationTime: '10 mins',
       isAvailable: true,
@@ -82,38 +86,54 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
   };
 
   const handleOpenEdit = (item: MenuItem) => {
+    setSaveError(null);
     setEditingItem(item);
     setFormData(item);
     setIsAddingNew(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cat = categories.find((c) => c.id === formData.categoryId);
-    const payload = {
-      ...formData,
-      categoryName: cat ? cat.name : (formData.categoryName || 'General'),
-      displayOrder: editingItem ? editingItem.displayOrder : items.length + 1,
-    };
+    setSaveError(null);
+    setIsSaving(true);
 
-    if (editingItem) {
-      onSaveItem({ ...editingItem, ...payload } as MenuItem);
-    } else {
-      onSaveItem(payload as Omit<MenuItem, 'id'>);
+    try {
+      const cat = categories.find((c) => c.id === formData.categoryId);
+      const payload = {
+        ...formData,
+        categoryName: cat ? cat.name : (formData.categoryName || 'General'),
+        displayOrder: editingItem ? editingItem.displayOrder : items.length + 1,
+      };
+
+      if (editingItem) {
+        await onSaveItem({ ...editingItem, ...payload } as MenuItem);
+        setSaveSuccessMsg(`Successfully updated "${formData.name}" in Supabase!`);
+      } else {
+        await onSaveItem(payload as Omit<MenuItem, 'id'>);
+        setSaveSuccessMsg(`Successfully added "${formData.name}" to Supabase!`);
+      }
+
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+      setIsAddingNew(false);
+      setEditingItem(null);
+    } catch (err: any) {
+      console.error('Menu save error:', err);
+      setSaveError(err.message || 'Failed to save menu item to Supabase');
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsAddingNew(false);
-    setEditingItem(null);
   };
 
   const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.categoryName.toLowerCase().includes(search.toLowerCase());
-    
+    const matchesSearch =
+      item.name.toLowerCase().includes(search.toLowerCase()) ||
+      item.categoryName.toLowerCase().includes(search.toLowerCase());
+
     let matchesCat = selectedCategory === 'all';
     if (!matchesCat) {
       const selectedCatObj = categories.find((c) => c.id === selectedCategory);
       const selectedCatName = selectedCatObj?.name?.trim().toLowerCase();
-      
+
       const matchesId = item.categoryId === selectedCategory;
       const matchesName = Boolean(
         selectedCatName &&
@@ -137,7 +157,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
             Menu Item Management
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            Add & edit menu items, photos (Device Upload, Camera, Gallery, Search, URL), pricing, descriptions, and stock status.
+            Add & edit menu items, photos (Laptop/Mobile Upload, Camera, Gallery, Search, URL), pricing, descriptions, and live stock status.
           </p>
         </div>
 
@@ -149,6 +169,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
           <span>Add New Menu Item</span>
         </button>
       </div>
+
+      {saveSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-950 border border-emerald-500 text-emerald-300 text-sm font-bold flex items-center gap-2 animate-fade-in">
+          <CheckCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{saveSuccessMsg}</span>
+        </div>
+      )}
 
       {/* Filter & Search Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -202,6 +229,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
             {/* Scrollable Form Body */}
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
               
+              {saveError && (
+                <div className="p-3.5 rounded-xl bg-red-950 border border-red-500 text-red-300 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{saveError}</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1">Food Name *</label>
@@ -252,7 +286,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
 
               {/* Advanced Production Image Section */}
               <ItemImagePicker
-                label="Food Dish Photo Selection"
+                label="Food Dish Photo Selection (Saved to Supabase Storage: food-images)"
                 currentUrl={formData.image || ''}
                 onChangeUrl={(url) => setFormData({ ...formData, image: url })}
                 galleryImages={galleryImages}
@@ -344,16 +378,22 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                     setIsAddingNew(false);
                     setEditingItem(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20"
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Food Item</span>
+                  {isSaving ? (
+                    <div className="w-4 h-4 border-2 border-namaha-green-deep border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSaving ? 'Writing to Supabase...' : 'Save Food Item'}</span>
                 </button>
               </div>
             </form>
@@ -372,7 +412,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
               <div className="flex items-start gap-3">
                 <div className="w-14 h-14 rounded-xl bg-namaha-green-deep overflow-hidden flex-shrink-0 relative border border-white/10">
                   {/* eslint-disable-next-next/no-img-element */}
-                  <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                  <img src={item.image || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'} alt={item.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-bold text-white text-base truncate">{item.name}</h4>
@@ -457,7 +497,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                   >
                     <div className="w-12 h-12 rounded-xl bg-namaha-green-deep overflow-hidden flex-shrink-0 relative border border-white/10 group-hover:border-amber-500 transition-colors">
                       {/* eslint-disable-next-next/no-img-element */}
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      <img src={item.image || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                     <div>
                       <div className="font-bold text-white text-base group-hover:text-amber-400 transition-colors flex items-center gap-2">

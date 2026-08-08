@@ -44,10 +44,10 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
 
     setUploadedFileName(file.name);
     setIsUploading(true);
-    setUploadStatusMsg({ type: 'info', text: 'Compressing and uploading image...' });
+    setUploadStatusMsg({ type: 'info', text: 'Compressing and uploading image to Supabase Storage (food-images)...' });
 
     try {
-      // 1. Client-side canvas compression so photo is lightweight (~40KB JPEG)
+      // 1. Client-side canvas compression so photo is lightweight
       const compressedDataUrl = await compressImageFile(file);
       onChangeUrl(compressedDataUrl);
       setUrlInput(compressedDataUrl);
@@ -61,7 +61,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
         setUrlInput(publicUrl);
         setUploadStatusMsg({
           type: 'success',
-          text: 'Image saved in Supabase Storage (food-menu-images)!',
+          text: 'Image saved in Supabase Storage (food-images)!',
         });
       } else if (error) {
         setUploadStatusMsg({
@@ -80,7 +80,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
   const handleSaveUrlToCloud = async () => {
     if (!urlInput.trim()) return;
     setIsUploading(true);
-    setUploadStatusMsg({ type: 'info', text: 'Saving URL to Supabase Storage...' });
+    setUploadStatusMsg({ type: 'info', text: 'Saving URL to Supabase Storage (food-images)...' });
 
     try {
       const { publicUrl, error } = await uploadImageViaAdminApi(urlInput.trim());
@@ -89,7 +89,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
         setUrlInput(publicUrl);
         setUploadStatusMsg({
           type: 'success',
-          text: 'External URL saved into Supabase Storage CDN!',
+          text: 'External URL saved into Supabase Storage (food-images)!',
         });
       } else {
         onChangeUrl(urlInput);
@@ -222,7 +222,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
           </button>
 
           <p className="text-xs text-gray-300 font-medium">
-            Upload from PC / Phone (JPEG, PNG, WEBP). Automatically saved to Supabase Cloud Storage.
+            Upload from PC / Phone (JPEG, PNG, WEBP). Automatically saved to Supabase Storage (food-images).
           </p>
 
           {uploadedFileName && (
@@ -314,7 +314,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
             </button>
           </div>
           <p className="text-[11px] text-gray-400 font-medium">
-            Paste any web image URL. You can also click &quot;Upload URL to Cloud&quot; to permanently store it in Supabase Storage.
+            Paste any web image URL. You can also click &quot;Upload URL to Cloud&quot; to permanently store it in Supabase Storage (food-images).
           </p>
         </div>
       )}

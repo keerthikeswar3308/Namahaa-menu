@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 const FALLBACK_SUPABASE_URL = 'https://rhnrcyzzqmqgqoigjmuu.supabase.co';
-const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJobnJjeXp6cW1xZ3FvaWdqbXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNDQ1NzEsImV4cCI6MjEwMDgyMDU3MX0.k_WOrw3ODkgXPWt6VnVdLFhUcuFR0UuTdmb97KX8C_4';
+const FALLBACK_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJobnJjeXp6cW1xZ3FvaWdqbXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNDQ1NzEsImV4cCI6MjEwMDgyMDU3MX0.k_WOrw3ODkgXPWt6VnVdLFhUcuFR0UuTdmb97KX8C_4';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
 
-export const BUCKET_NAME = 'food-menu-images';
+export const BUCKET_NAME = 'food-images';
 
 export const isSupabaseConfigured = (): boolean => {
   return (
@@ -20,8 +21,23 @@ export const isSupabaseConfigured = (): boolean => {
 // Client instance for public read and interactive menu operations (Anon Read Only)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+function getAdminAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (typeof window !== 'undefined') {
+    const passcode = localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026';
+    headers['x-admin-passcode'] = passcode;
+    headers['x-admin-auth'] = passcode;
+    const token = sessionStorage.getItem('namahaa_admin_token');
+    if (token) {
+      headers['x-admin-token'] = token;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  return headers;
+}
+
 /**
- * Uploads a File, Blob, Image URL, or Base64 Data URL to Supabase Storage ('food-menu-images')
+ * Uploads a File, Blob, Image URL, or Base64 Data URL to Supabase Storage ('food-images')
  * via the secure Next.js Server API route (/api/admin/upload-image).
  * This keeps the service role key safe on the server and allows only authorized admin uploads.
  */
@@ -30,7 +46,7 @@ export async function uploadImageViaAdminApi(
   customFilename?: string
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   try {
-    const adminPasscode = typeof window !== 'undefined' ? (localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026') : 'namahaa2026';
+    const authHeaders = getAdminAuthHeaders();
 
     // 1. File or Blob upload (multipart/form-data)
     if (fileOrBlobOrUrl instanceof File || fileOrBlobOrUrl instanceof Blob) {
@@ -42,17 +58,18 @@ export async function uploadImageViaAdminApi(
 
       const res = await fetch('/api/admin/upload-image', {
         method: 'POST',
-        headers: {
-          'x-admin-passcode': adminPasscode,
-        },
+        headers: authHeaders,
         body: formData,
       });
 
       const data = await res.json();
-      if (data.success && data.publicUrl) {
+      if (res.ok && data.success && data.publicUrl) {
         return { publicUrl: data.publicUrl, error: null };
       }
-      return { publicUrl: null, error: new Error(data.error || 'Server upload failed') };
+      return {
+        publicUrl: null,
+        error: new Error(data.error || `Server upload failed (HTTP ${res.status})`),
+      };
     }
 
     // 2. Base64 Data URL or External Image URL (application/json)
@@ -66,45 +83,48 @@ export async function uploadImageViaAdminApi(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-passcode': adminPasscode,
+          ...authHeaders,
         },
         body: JSON.stringify(payload),
       });
 
       const data = await res.json();
-      if (data.success && data.publicUrl) {
+      if (res.ok && data.success && data.publicUrl) {
         return { publicUrl: data.publicUrl, error: null };
       }
-      return { publicUrl: null, error: new Error(data.error || 'Failed to import image to server') };
+      return {
+        publicUrl: null,
+        error: new Error(data.error || `Failed to import image to server (HTTP ${res.status})`),
+      };
     }
 
     return { publicUrl: null, error: new Error('Unsupported image payload') };
   } catch (err: any) {
     console.error('uploadImageViaAdminApi error:', err);
-    return { publicUrl: null, error: err as Error };
+    return { publicUrl: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
 
 /**
- * Deletes a storage image from 'food-menu-images' via the secure Next.js Server API route.
+ * Deletes a storage image from 'food-images' via the secure Next.js Server API route.
  */
 export async function deleteImageViaAdminApi(imageUrl: string): Promise<boolean> {
   if (!imageUrl || !imageUrl.includes(BUCKET_NAME)) return false;
 
   try {
-    const adminPasscode = typeof window !== 'undefined' ? (localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026') : 'namahaa2026';
+    const authHeaders = getAdminAuthHeaders();
 
     const res = await fetch('/api/admin/delete-image', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-admin-passcode': adminPasscode,
+        ...authHeaders,
       },
       body: JSON.stringify({ imageUrl }),
     });
 
     const data = await res.json();
-    return Boolean(data.success);
+    return Boolean(res.ok && data.success);
   } catch (err) {
     console.error('deleteImageViaAdminApi error:', err);
     return false;
@@ -124,8 +144,10 @@ export async function ensureCloudUrl(url: string): Promise<string> {
   // Local base64 data URLs get uploaded to Supabase Storage bucket via secure server API
   if (url.startsWith('data:')) {
     try {
-      const { publicUrl } = await uploadImageViaAdminApi(url);
-      return publicUrl || url;
+      const { publicUrl, error } = await uploadImageViaAdminApi(url);
+      if (publicUrl) return publicUrl;
+      if (error) console.warn('ensureCloudUrl upload warning:', error);
+      return url;
     } catch (err) {
       console.error('ensureCloudUrl error:', err);
       return url;

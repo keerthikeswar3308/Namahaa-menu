@@ -12,12 +12,13 @@ import { GalleryManagement } from '@/components/admin/GalleryManagement';
 import { DocxImporter } from '@/components/admin/DocxImporter';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('overview');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // App Data States
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -30,18 +31,26 @@ export default function AdminPage() {
     loadAllData();
   }, []);
 
-  const loadAllData = () => {
+  const loadAllData = async () => {
+    // 1. Immediate in-memory render
     setMenuItems(NamahaStore.getMenuItems());
     setCategories(NamahaStore.getCategories());
     setRestaurantInfo(NamahaStore.getRestaurantInfo());
     setGalleryImages(NamahaStore.getGallery());
 
-    NamahaStore.syncAllFromSupabase().then((data) => {
+    // 2. Authoritative Supabase sync
+    setIsRefreshing(true);
+    try {
+      const data = await NamahaStore.syncAllFromSupabase();
       if (data.items && data.items.length > 0) setMenuItems(data.items);
       if (data.categories && data.categories.length > 0) setCategories(data.categories);
       if (data.restaurantInfo) setRestaurantInfo(data.restaurantInfo);
       if (data.gallery && data.gallery.length > 0) setGalleryImages(data.gallery);
-    });
+    } catch (err) {
+      console.warn('Admin load data error:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleLogout = () => {
@@ -50,11 +59,15 @@ export default function AdminPage() {
   };
 
   // --- Handlers ---
-  const handleToggleRestaurantOpen = () => {
-    const updated = NamahaStore.updateRestaurantInfo({
-      isRestaurantOpen: !restaurantInfo.isRestaurantOpen,
-    });
-    setRestaurantInfo(updated);
+  const handleToggleRestaurantOpen = async () => {
+    try {
+      const updated = await NamahaStore.updateRestaurantInfo({
+        isRestaurantOpen: !restaurantInfo.isRestaurantOpen,
+      });
+      setRestaurantInfo(updated);
+    } catch (err: any) {
+      alert(`Failed to update restaurant status in Supabase: ${err.message}`);
+    }
   };
 
   const handleSaveMenuItem = async (itemData: MenuItem | Omit<MenuItem, 'id'>) => {
@@ -63,40 +76,53 @@ export default function AdminPage() {
     } else {
       await NamahaStore.addMenuItem(itemData);
     }
-    setMenuItems(NamahaStore.getMenuItems());
+    await loadAllData();
   };
 
-  const handleDeleteMenuItem = (id: string) => {
+  const handleDeleteMenuItem = async (id: string) => {
     if (confirm('Are you sure you want to delete this food item?')) {
-      NamahaStore.deleteMenuItem(id);
-      setMenuItems(NamahaStore.getMenuItems());
+      try {
+        await NamahaStore.deleteMenuItem(id);
+        await loadAllData();
+      } catch (err: any) {
+        alert(`Failed to delete menu item from Supabase: ${err.message}`);
+      }
     }
   };
 
   const handleToggleItemStatus = async (id: string, isAvailable: boolean) => {
-    await NamahaStore.updateMenuItem(id, { isAvailable });
-    setMenuItems(NamahaStore.getMenuItems());
+    try {
+      await NamahaStore.updateMenuItem(id, { isAvailable });
+      await loadAllData();
+    } catch (err: any) {
+      alert(`Failed to update availability in Supabase: ${err.message}`);
+    }
   };
 
-  const handleSaveCategory = (catData: Category | Omit<Category, 'id'>) => {
+  const handleSaveCategory = async (catData: Category | Omit<Category, 'id'>) => {
     if ('id' in catData) {
-      NamahaStore.updateCategory(catData.id, catData);
+      await NamahaStore.updateCategory(catData.id, catData);
     } else {
-      NamahaStore.addCategory(catData);
+      await NamahaStore.addCategory(catData);
     }
-    setCategories(NamahaStore.getCategories());
+    await loadAllData();
   };
 
-  const handleDeleteCategory = (id: string) => {
+  const handleDeleteCategory = async (id: string) => {
     if (confirm('Are you sure you want to delete this category?')) {
-      NamahaStore.deleteCategory(id);
-      setCategories(NamahaStore.getCategories());
+      try {
+        await NamahaStore.deleteCategory(id);
+        await loadAllData();
+      } catch (err: any) {
+        alert(`Failed to delete category from Supabase: ${err.message}`);
+      }
     }
   };
 
-  const handleSaveInfo = (newInfo: RestaurantInfo) => {
-    const updated = NamahaStore.updateRestaurantInfo(newInfo);
+  const handleSaveInfo = async (newInfo: RestaurantInfo) => {
+    const updated = await NamahaStore.updateRestaurantInfo(newInfo);
     setRestaurantInfo(updated);
+    await loadAllData();
   };
 
   const handleSaveGalleryImage = async (imgData: GalleryImage | Omit<GalleryImage, 'id'>) => {
@@ -105,90 +131,113 @@ export default function AdminPage() {
     } else {
       await NamahaStore.addGalleryImage(imgData);
     }
-    setGalleryImages(NamahaStore.getGallery());
+    await loadAllData();
   };
 
-  const handleDeleteGalleryImage = (id: string) => {
-    NamahaStore.deleteGalleryImage(id);
-    setGalleryImages(NamahaStore.getGallery());
+  const handleDeleteGalleryImage = async (id: string) => {
+    try {
+      await NamahaStore.deleteGalleryImage(id);
+      await loadAllData();
+    } catch (err: any) {
+      alert(`Failed to delete gallery image from Supabase: ${err.message}`);
+    }
   };
 
   const handleToggleGalleryImage = async (id: string, isEnabled: boolean) => {
-    await NamahaStore.updateGalleryImage(id, { isEnabled });
-    setGalleryImages(NamahaStore.getGallery());
+    try {
+      await NamahaStore.updateGalleryImage(id, { isEnabled });
+      await loadAllData();
+    } catch (err: any) {
+      alert(`Failed to toggle gallery image in Supabase: ${err.message}`);
+    }
   };
 
   const handleDocxImportSuccess = async (result: ParsedImportResult, mode: 'replace' | 'merge' = 'merge') => {
-    if (mode === 'replace') {
-      // 1. Clean slate: Generate new categories and items
-      const newCategories: Category[] = result.categories.map((c, idx) => ({
-        id: `cat-${c.name.toLowerCase().replace(/[^a-z0-9]/g, '-') || idx + 1}`,
-        name: c.name,
-        description: c.description || `${c.name} specialties`,
-        displayOrder: c.displayOrder || idx + 1,
-        isEnabled: true,
-      }));
+    try {
+      if (mode === 'replace') {
+        const newCategories: Category[] = result.categories.map((c, idx) => ({
+          id: `cat-${c.name.toLowerCase().replace(/[^a-z0-9]/g, '-') || idx + 1}`,
+          name: c.name,
+          description: c.description || `${c.name} specialties`,
+          displayOrder: c.displayOrder || idx + 1,
+          isEnabled: true,
+        }));
 
-      const newItems: MenuItem[] = result.items.map((i, idx) => {
-        const matchCat = newCategories.find(
-          (c) => c.name.toLowerCase() === i.categoryName.toLowerCase()
-        );
-        return {
-          id: `item-${Date.now()}-${idx + 1}`,
-          name: i.name,
-          description: i.description || `Authentic ${i.name.toLowerCase()}`,
-          price: i.price,
-          categoryId: matchCat ? matchCat.id : newCategories[0]?.id || 'cat-general',
-          categoryName: i.categoryName,
-          image: i.image || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
-          isVeg: i.isVeg !== false,
-          preparationTime: i.preparationTime || '10 mins',
-          isAvailable: true,
-          displayOrder: i.displayOrder || idx + 1,
-        };
-      });
+        const newItems: MenuItem[] = result.items.map((i, idx) => {
+          const matchCat = newCategories.find(
+            (c) => c.name.toLowerCase() === i.categoryName.toLowerCase()
+          );
+          return {
+            id: `item-${Date.now()}-${idx + 1}`,
+            name: i.name,
+            description: i.description || `Authentic ${i.name.toLowerCase()}`,
+            price: i.price,
+            categoryId: matchCat ? matchCat.id : newCategories[0]?.id || 'cat-general',
+            categoryName: i.categoryName,
+            image: i.image || '',
+            isVeg: i.isVeg !== false,
+            preparationTime: i.preparationTime || '10 mins',
+            isAvailable: true,
+            displayOrder: i.displayOrder || idx + 1,
+          };
+        });
 
-      await NamahaStore.replaceAllMenuItems(newItems, newCategories);
-      loadAllData();
-      return;
-    }
-
-    // 2. Merge mode: Add new categories and append items
-    const existingCats = NamahaStore.getCategories();
-    let currentCatList = [...existingCats];
-    for (const newCat of result.categories) {
-      if (!currentCatList.find((c) => c.name.toLowerCase() === newCat.name.toLowerCase())) {
-        const addedCat = NamahaStore.addCategory(newCat);
-        currentCatList.push(addedCat);
+        await NamahaStore.replaceAllMenuItems(newItems, newCategories);
+        await loadAllData();
+        return;
       }
-    }
 
-    // Add items
-    for (const item of result.items) {
-      const matchCat = currentCatList.find((c) => c.name.toLowerCase() === item.categoryName.toLowerCase());
-      if (matchCat) {
-        item.categoryId = matchCat.id;
+      // Merge mode
+      const existingCats = NamahaStore.getCategories();
+      let currentCatList = [...existingCats];
+      for (const newCat of result.categories) {
+        if (!currentCatList.find((c) => c.name.toLowerCase() === newCat.name.toLowerCase())) {
+          const addedCat = await NamahaStore.addCategory(newCat);
+          currentCatList.push(addedCat);
+        }
       }
-      await NamahaStore.addMenuItem(item);
-    }
 
-    loadAllData();
-  };
+      for (const item of result.items) {
+        const matchCat = currentCatList.find((c) => c.name.toLowerCase() === item.categoryName.toLowerCase());
+        if (matchCat) {
+          item.categoryId = matchCat.id;
+        }
+        await NamahaStore.addMenuItem(item);
+      }
 
-  const handleResetMenu = () => {
-    if (confirm('Are you sure you want to reset the menu back to original default dataset?')) {
-      NamahaStore.resetMenuItems();
-      loadAllData();
+      await loadAllData();
+    } catch (err: any) {
+      alert(`Import error syncing to Supabase: ${err.message}`);
     }
   };
 
-  const handleClearAllItems = () => {
-    NamahaStore.clearAllMenuItems();
-    loadAllData();
+  const handleResetMenu = async () => {
+    if (confirm('Are you sure you want to reset the menu in Supabase back to default seed?')) {
+      try {
+        await NamahaStore.resetMenuItems();
+        await loadAllData();
+      } catch (err: any) {
+        alert(`Failed to reset menu in Supabase: ${err.message}`);
+      }
+    }
+  };
+
+  const handleClearAllItems = async () => {
+    if (confirm('Are you sure you want to clear all menu items in Supabase?')) {
+      try {
+        await NamahaStore.clearAllMenuItems();
+        await loadAllData();
+      } catch (err: any) {
+        alert(`Failed to clear menu items in Supabase: ${err.message}`);
+      }
+    }
   };
 
   if (!isAuthenticated) {
-    return <AdminLogin onSuccess={() => setIsAuthenticated(true)} />;
+    return <AdminLogin onSuccess={() => {
+      setIsAuthenticated(true);
+      loadAllData();
+    }} />;
   }
 
   const tabs = [
@@ -199,7 +248,6 @@ export default function AdminPage() {
     { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'gallery', label: 'Gallery', icon: <Camera className="w-4 h-4" /> },
   ];
-
 
   return (
     <div className="min-h-screen bg-namaha-green-cream dark:bg-namaha-green-deep text-slate-800 dark:text-white flex flex-col justify-between transition-colors duration-300">
@@ -216,12 +264,22 @@ export default function AdminPage() {
               </h1>
               <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-semibold">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Protected Management Panel</span>
+                <span>Supabase Live Sync Active</span>
+                {isRefreshing && <RefreshCw className="w-3 h-3 animate-spin text-namaha-gold ml-1" />}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadAllData()}
+              title="Refresh live data from Supabase"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-namaha-gold text-xs font-semibold hover:bg-white/20 transition"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Sync Supabase</span>
+            </button>
+
             <Link
               href="/"
               target="_blank"
@@ -295,9 +353,9 @@ export default function AdminPage() {
             categories={categories}
             onSaveCategory={handleSaveCategory}
             onDeleteCategory={handleDeleteCategory}
-            onReorderCategories={(reordered) => {
-              NamahaStore.reorderCategories(reordered);
-              setCategories(NamahaStore.getCategories());
+            onReorderCategories={async (reordered) => {
+              await NamahaStore.reorderCategories(reordered);
+              await loadAllData();
             }}
           />
         )}
@@ -334,7 +392,7 @@ export default function AdminPage() {
 
       {/* Admin Footer */}
       <footer className="bg-namaha-green-dark border-t border-white/10 py-4 px-4 text-center text-xs text-gray-400">
-        Namahaa Tiffin Room • Secure Admin System © 2026
+        Namahaa Tiffin Room • Secure Admin System & Supabase Live Engine © 2026
       </footer>
 
     </div>

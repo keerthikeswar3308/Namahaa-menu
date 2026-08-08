@@ -3,14 +3,14 @@
 import React, { useState } from 'react';
 import { GalleryImage } from '@/types';
 import { ItemImagePicker } from './ItemImagePicker';
-import { Camera, Plus, Trash2, Edit2, X, Save, Search, Filter } from 'lucide-react';
+import { Camera, Plus, Trash2, Edit2, X, Save, Search, Filter, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { getFreshImageUrl } from '@/lib/imageUtils';
 
 interface GalleryManagementProps {
   images: GalleryImage[];
-  onSaveImage: (img: GalleryImage | Omit<GalleryImage, 'id'>) => void;
-  onDeleteImage: (id: string) => void;
-  onToggleImage: (id: string, enabled: boolean) => void;
+  onSaveImage: (img: GalleryImage | Omit<GalleryImage, 'id'>) => Promise<void> | void;
+  onDeleteImage: (id: string) => Promise<void> | void;
+  onToggleImage: (id: string, enabled: boolean) => Promise<void> | void;
 }
 
 export const GalleryManagement: React.FC<GalleryManagementProps> = ({
@@ -23,19 +23,23 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
   const [isAdding, setIsAdding] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   const [formData, setFormData] = useState<Partial<GalleryImage>>({
     title: '',
     category: 'Breakfast',
-    url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+    url: '',
     isEnabled: true,
   });
 
   const handleOpenAdd = () => {
+    setErrorMsg('');
     setFormData({
       title: '',
       category: 'Breakfast',
-      url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
+      url: '',
       isEnabled: true,
     });
     setEditingImage(null);
@@ -43,31 +47,44 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
   };
 
   const handleOpenEdit = (img: GalleryImage) => {
+    setErrorMsg('');
     setEditingImage(img);
     setFormData(img);
     setIsAdding(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.url) return;
+    setErrorMsg('');
+    setIsSaving(true);
 
-    if (editingImage) {
-      onSaveImage({
-        ...editingImage,
-        ...formData,
-      } as GalleryImage);
-    } else {
-      onSaveImage({
-        title: formData.title,
-        category: formData.category || 'Food',
-        url: formData.url,
-        isEnabled: formData.isEnabled ?? true,
-      });
+    try {
+      if (editingImage) {
+        await onSaveImage({
+          ...editingImage,
+          ...formData,
+        } as GalleryImage);
+        setSuccessMsg(`Updated gallery photo "${formData.title}" in Supabase!`);
+      } else {
+        await onSaveImage({
+          title: formData.title,
+          category: formData.category || 'Food',
+          url: formData.url,
+          isEnabled: formData.isEnabled ?? true,
+        });
+        setSuccessMsg(`Added gallery photo "${formData.title}" to Supabase!`);
+      }
+
+      setTimeout(() => setSuccessMsg(''), 3500);
+      setIsAdding(false);
+      setEditingImage(null);
+    } catch (err: any) {
+      console.error('Gallery save error:', err);
+      setErrorMsg(err.message || 'Failed to save gallery photo to Supabase');
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsAdding(false);
-    setEditingImage(null);
   };
 
   // Get unique categories for filter
@@ -91,7 +108,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
             <Camera className="w-6 h-6" /> Restaurant Media Gallery Manager
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            Private media library. Upload from device/camera, import via URL, or search food photos into Supabase Storage.
+            Private media library. Upload from device/camera, import via URL, or search food photos into Supabase Storage (<strong>food-images</strong>).
           </p>
         </div>
 
@@ -103,6 +120,20 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
           <span>Upload / Add Gallery Photo</span>
         </button>
       </div>
+
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-950 border border-emerald-500 text-emerald-300 text-sm font-bold flex items-center gap-2 animate-fade-in">
+          <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-red-950 border border-red-500 text-red-300 text-sm font-bold flex items-center gap-2 animate-fade-in">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       {/* Filter & Search Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -177,7 +208,7 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
 
               {/* Advanced Image Picker Integration */}
               <ItemImagePicker
-                label="Gallery Photo Source (Supabase Storage)"
+                label="Gallery Photo Source (Saved to Supabase: food-images)"
                 currentUrl={formData.url || ''}
                 onChangeUrl={(url) => setFormData({ ...formData, url })}
                 galleryImages={images}
@@ -200,16 +231,22 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
                     setIsAdding(false);
                     setEditingImage(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20"
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Gallery Image</span>
+                  {isSaving ? (
+                    <div className="w-4 h-4 border-2 border-namaha-green-deep border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSaving ? 'Writing to Supabase...' : 'Save Gallery Image'}</span>
                 </button>
               </div>
             </form>
@@ -238,7 +275,13 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
 
             <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
               <button
-                onClick={() => onToggleImage(img.id, !img.isEnabled)}
+                onClick={async () => {
+                  try {
+                    await onToggleImage(img.id, !img.isEnabled);
+                  } catch (err: any) {
+                    setErrorMsg(err.message || 'Failed to toggle gallery visibility');
+                  }
+                }}
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                   img.isEnabled
                     ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
@@ -257,7 +300,17 @@ export const GalleryManagement: React.FC<GalleryManagementProps> = ({
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => onDeleteImage(img.id)}
+                  onClick={async () => {
+                    if (confirm(`Delete gallery image "${img.title}"?`)) {
+                      try {
+                        await onDeleteImage(img.id);
+                        setSuccessMsg(`Deleted gallery image "${img.title}" from Supabase!`);
+                        setTimeout(() => setSuccessMsg(''), 3000);
+                      } catch (err: any) {
+                        setErrorMsg(err.message || 'Failed to delete gallery image');
+                      }
+                    }
+                  }}
                   className="p-1.5 rounded-lg bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white transition"
                   title="Delete Image"
                 >

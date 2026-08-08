@@ -137,16 +137,18 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
 
           <button
             onClick={async () => {
-              await NamahaStore.seedSouthIndianDishPhotos();
-              const count = await NamahaStore.syncAllMenuItemsToSupabase();
-              alert(`Successfully synced all ${count} dishes (including Pesarattu & Millet Dosas) with full details & photos to Supabase DB!`);
-              window.location.reload();
+              try {
+                const count = await NamahaStore.syncAllMenuItemsToSupabase();
+                alert(`Successfully synchronized ${count} menu items directly to Supabase DB!`);
+              } catch (err: any) {
+                alert(`Sync error: ${err.message}`);
+              }
             }}
             className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 border border-amber-500/50 text-left transition flex items-center justify-between group"
           >
             <div>
-              <span className="text-sm font-bold text-amber-300 block">⚡ Sync All 101 Dishes</span>
-              <span className="text-xs text-amber-400/80">Pesarattu, Millet Dosas, Vada...</span>
+              <span className="text-sm font-bold text-amber-300 block">⚡ Sync All to Supabase</span>
+              <span className="text-xs text-amber-400/80">Pesarattu, Dosas, Vada...</span>
             </div>
             <Sparkles className="w-5 h-5 text-amber-300 group-hover:scale-125 transition-transform" />
           </button>

@@ -1,26 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadBufferToStorage } from '@/lib/supabaseServer';
+import { verifyAdminRequest } from '@/lib/authServer';
 
-const VALID_PASSCODES = ['namahaa2026', 'admin', 'namahaa'];
-
-function isAuthorizedAdmin(request: NextRequest): boolean {
-  const passcode = request.headers.get('x-admin-passcode') || request.cookies.get('namahaa_admin_auth')?.value;
-  return Boolean(passcode && VALID_PASSCODES.includes(passcode.trim()));
-}
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Verify custom Admin Authentication
-    if (!isAuthorizedAdmin(request)) {
-      // Check query param fallback if needed
-      const authHeader = request.headers.get('authorization');
-      const token = authHeader?.replace('Bearer ', '');
-      if (!token || !VALID_PASSCODES.includes(token)) {
-        return NextResponse.json(
-          { success: false, error: 'Unauthorized: Valid Admin passcode required' },
-          { status: 401 }
-        );
-      }
+    // 1. Verify Admin Authentication strictly
+    if (!verifyAdminRequest(request)) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: Valid Admin authentication required' },
+        { status: 401 }
+      );
     }
 
     const contentType = request.headers.get('content-type') || '';
@@ -49,7 +41,7 @@ export async function POST(request: NextRequest) {
 
       if (error || !publicUrl) {
         return NextResponse.json(
-          { success: false, error: error?.message || 'Failed to upload image to Supabase Storage' },
+          { success: false, error: error?.message || 'Failed to upload image to Supabase Storage (food-images)' },
           { status: 500 }
         );
       }
@@ -71,12 +63,12 @@ export async function POST(request: NextRequest) {
       if (imageUrl && typeof imageUrl === 'string') {
         if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
           return NextResponse.json(
-            { success: false, error: 'Invalid external image URL' },
+            { success: false, error: 'Invalid external image URL. Must start with http:// or https://' },
             { status: 400 }
           );
         }
 
-        // Fetch image bytes on the server side (bypasses CORS restrictions)
+        // Fetch image bytes on the server side
         const fetchRes = await fetch(imageUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) NamahaaBot/1.0',
@@ -85,7 +77,7 @@ export async function POST(request: NextRequest) {
 
         if (!fetchRes.ok) {
           return NextResponse.json(
-            { success: false, error: `Failed to download image from source (HTTP ${fetchRes.status})` },
+            { success: false, error: `Failed to download image from source URL (HTTP ${fetchRes.status})` },
             { status: 400 }
           );
         }
@@ -98,7 +90,7 @@ export async function POST(request: NextRequest) {
 
         if (error || !publicUrl) {
           return NextResponse.json(
-            { success: false, error: error?.message || 'Failed to store downloaded image' },
+            { success: false, error: error?.message || 'Failed to store downloaded image into Supabase Storage' },
             { status: 500 }
           );
         }
@@ -115,7 +107,7 @@ export async function POST(request: NextRequest) {
         const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (!matches || matches.length !== 3) {
           return NextResponse.json(
-            { success: false, error: 'Invalid data URL format' },
+            { success: false, error: 'Invalid base64 data URL format' },
             { status: 400 }
           );
         }
@@ -127,7 +119,7 @@ export async function POST(request: NextRequest) {
 
         if (error || !publicUrl) {
           return NextResponse.json(
-            { success: false, error: error?.message || 'Failed to upload data URL image' },
+            { success: false, error: error?.message || 'Failed to upload image data URL to Supabase Storage' },
             { status: 500 }
           );
         }
@@ -152,7 +144,7 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error('API /api/admin/upload-image error:', err);
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: err.message || 'Internal server error during image upload' },
       { status: 500 }
     );
   }

@@ -20,13 +20,14 @@ import {
   ChevronsUp,
   ChevronsDown,
   RotateCcw,
+  AlertCircle,
 } from 'lucide-react';
 
 interface CategoryManagementProps {
   categories: Category[];
-  onSaveCategory: (cat: Category | Omit<Category, 'id'>) => void;
-  onDeleteCategory: (id: string) => void;
-  onReorderCategories?: (reordered: Category[]) => void;
+  onSaveCategory: (cat: Category | Omit<Category, 'id'>) => Promise<void> | void;
+  onDeleteCategory: (id: string) => Promise<void> | void;
+  onReorderCategories?: (reordered: Category[]) => Promise<void> | void;
 }
 
 export const CategoryManagement: React.FC<CategoryManagementProps> = ({
@@ -43,6 +44,8 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   const [hasUnsavedOrder, setHasUnsavedOrder] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Category>>({
     name: '',
@@ -66,6 +69,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   }, [categories]);
 
   const handleOpenAdd = () => {
+    setErrorMsg('');
     setFormData({
       name: '',
       description: '',
@@ -77,6 +81,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   const handleOpenEdit = (cat: Category) => {
+    setErrorMsg('');
     setEditingCategory(cat);
     setFormData({
       name: cat.name,
@@ -87,36 +92,45 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setIsAddingNew(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
+    setErrorMsg('');
+    setIsSaving(true);
 
-    if (editingCategory) {
-      onSaveCategory({
-        ...editingCategory,
-        name: formData.name,
-        description: formData.description || '',
-        displayOrder: Number(formData.displayOrder) || editingCategory.displayOrder || 1,
-        isEnabled: formData.isEnabled ?? true,
-      } as Category);
-      setSuccessMsg(`Updated category "${formData.name}"!`);
-    } else {
-      onSaveCategory({
-        name: formData.name,
-        description: formData.description || '',
-        displayOrder: Number(formData.displayOrder) || categories.length + 1,
-        isEnabled: formData.isEnabled ?? true,
-      });
-      setSuccessMsg(`Created new category "${formData.name}"!`);
+    try {
+      if (editingCategory) {
+        await onSaveCategory({
+          ...editingCategory,
+          name: formData.name,
+          description: formData.description || '',
+          displayOrder: Number(formData.displayOrder) || editingCategory.displayOrder || 1,
+          isEnabled: formData.isEnabled ?? true,
+        } as Category);
+        setSuccessMsg(`Updated category "${formData.name}" in Supabase!`);
+      } else {
+        await onSaveCategory({
+          name: formData.name,
+          description: formData.description || '',
+          displayOrder: Number(formData.displayOrder) || categories.length + 1,
+          isEnabled: formData.isEnabled ?? true,
+        });
+        setSuccessMsg(`Created new category "${formData.name}" in Supabase!`);
+      }
+
+      setTimeout(() => setSuccessMsg(''), 3500);
+      setIsAddingNew(false);
+      setEditingCategory(null);
+    } catch (err: any) {
+      console.error('Category save error:', err);
+      setErrorMsg(err.message || 'Failed to save category to Supabase');
+    } finally {
+      setIsSaving(false);
     }
-
-    setTimeout(() => setSuccessMsg(''), 3500);
-    setIsAddingNew(false);
-    setEditingCategory(null);
   };
 
   // --- 1. Move Step by Step (Up / Down) ---
-  const moveCategory = (index: number, direction: 'up' | 'down') => {
+  const moveCategory = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= orderedList.length) return;
 
@@ -138,14 +152,18 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setOrderInputs(newInputs);
 
     if (onReorderCategories) {
-      onReorderCategories(finalReordered);
+      try {
+        await onReorderCategories(finalReordered);
+        setSuccessMsg(`Moved "${item.name}" ${direction === 'up' ? 'Up' : 'Down'} and saved to Supabase!`);
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to update category order in Supabase');
+      }
     }
-    setSuccessMsg(`Moved "${item.name}" ${direction === 'up' ? 'Up' : 'Down'} in category sequence!`);
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   // --- 2. Move to Top or Bottom ---
-  const moveToExtreme = (index: number, position: 'top' | 'bottom') => {
+  const moveToExtreme = async (index: number, position: 'top' | 'bottom') => {
     if (index < 0 || index >= orderedList.length) return;
     const updated = [...orderedList];
     const item = updated.splice(index, 1)[0];
@@ -169,10 +187,14 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setOrderInputs(newInputs);
 
     if (onReorderCategories) {
-      onReorderCategories(finalReordered);
+      try {
+        await onReorderCategories(finalReordered);
+        setSuccessMsg(`Moved "${item.name}" to the ${position === 'top' ? 'Top (#1)' : 'Bottom'} and saved to Supabase!`);
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to update category order in Supabase');
+      }
     }
-    setSuccessMsg(`Moved "${item.name}" to the ${position === 'top' ? 'Top (1st position)' : 'Bottom'}!`);
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   // --- 3. Manual Number Input with Explicit Save ---
@@ -185,18 +207,16 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setHasUnsavedOrder(true);
   };
 
-  const handleSaveManualOrder = () => {
+  const handleSaveManualOrder = async () => {
     const updated = orderedList.map((cat) => ({
       ...cat,
       displayOrder: orderInputs[cat.id] ?? cat.displayOrder ?? 1,
     }));
 
-    // Sort according to user-typed numbers
     const sorted = [...updated].sort(
       (a, b) => (a.displayOrder || 0) - (b.displayOrder || 0)
     );
 
-    // Normalize display orders to clean 1, 2, 3...
     const finalSorted = sorted.map((c, i) => ({
       ...c,
       displayOrder: i + 1,
@@ -211,10 +231,14 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setHasUnsavedOrder(false);
 
     if (onReorderCategories) {
-      onReorderCategories(finalSorted);
+      try {
+        await onReorderCategories(finalSorted);
+        setSuccessMsg('Category order sequence saved & synced to Supabase!');
+        setTimeout(() => setSuccessMsg(''), 3500);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to save order sequence to Supabase');
+      }
     }
-    setSuccessMsg('Category order sequence saved & synced to live menu!');
-    setTimeout(() => setSuccessMsg(''), 3500);
   };
 
   // --- 4. HTML5 Drag and Drop Handlers ---
@@ -234,7 +258,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setOrderedList(updated);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
     if (draggedIndex === null) return;
     const finalReordered = orderedList.map((c, i) => ({
       ...c,
@@ -250,14 +274,18 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setDraggedIndex(null);
 
     if (onReorderCategories) {
-      onReorderCategories(finalReordered);
+      try {
+        await onReorderCategories(finalReordered);
+        setSuccessMsg('Category reordered via drag & drop and saved to Supabase!');
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to save drag order to Supabase');
+      }
     }
-    setSuccessMsg('Category reordered via drag & drop!');
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   // --- 5. Quick Sort A-Z ---
-  const handleSortAlphabetically = () => {
+  const handleSortAlphabetically = async () => {
     const sorted = [...orderedList].sort((a, b) => a.name.localeCompare(b.name));
     const finalSorted = sorted.map((c, i) => ({
       ...c,
@@ -272,10 +300,14 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     setOrderInputs(newInputs);
 
     if (onReorderCategories) {
-      onReorderCategories(finalSorted);
+      try {
+        await onReorderCategories(finalSorted);
+        setSuccessMsg('Categories sorted alphabetically (A-Z) and saved to Supabase!');
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to save sorted categories to Supabase');
+      }
     }
-    setSuccessMsg('Categories sorted alphabetically (A-Z)!');
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   return (
@@ -285,10 +317,10 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 rounded-3xl bg-namaha-green-dark border border-namaha-gold/20 shadow-xl">
         <div>
           <h2 className="text-2xl font-serif font-bold text-namaha-gold flex items-center gap-2">
-            <FolderTree className="w-6 h-6" /> Category Management & Order List
+            <FolderTree className="w-6 h-6" /> Category Management & Order Sequence
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            Reorder categories using the <strong>Move Up/Down arrows</strong>, <strong>Drag & Drop</strong>, or type custom order numbers.
+            Reorder categories using the <strong>Move Up/Down arrows</strong>, <strong>Drag & Drop</strong>, or type custom order numbers. Synced to Supabase.
           </p>
         </div>
 
@@ -336,6 +368,13 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         </div>
       )}
 
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-red-950 border border-red-500 text-red-300 text-sm font-bold flex items-center gap-2 animate-fade-in">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       {/* Quick Action Toolbar for Reordering */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-black/40 border border-white/10 text-xs">
         <div className="flex items-center gap-2 text-gray-300">
@@ -357,7 +396,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-xs shadow-lg hover:scale-105 transition flex items-center gap-1.5 animate-bounce"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Save Order Sequence</span>
+              <span>Save Order Sequence to Supabase</span>
             </button>
           )}
 
@@ -445,16 +484,22 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                     setIsAddingNew(false);
                     setEditingCategory(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20"
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-xl bg-white/10 text-xs font-semibold hover:bg-white/20 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-bold text-xs shadow-md hover:bg-amber-400 flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Category</span>
+                  {isSaving ? (
+                    <div className="w-4 h-4 border-2 border-namaha-green-deep border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSaving ? 'Writing to Supabase...' : 'Save Category'}</span>
                 </button>
               </div>
             </form>
@@ -462,9 +507,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 1. ORDER LIST VIEW (PRIMARY REORDER INTERFACE) */}
-      {/* ======================================================== */}
+      {/* ORDER LIST VIEW */}
       {viewMode === 'orderList' && (
         <div className="p-6 rounded-3xl bg-namaha-green-dark border-2 border-namaha-gold/30 shadow-2xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
@@ -503,9 +546,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       : 'border-white/10 hover:border-namaha-gold/50'
                   }`}
                 >
-                  {/* Left: Drag Handle, Badge, & Info */}
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Drag Grip */}
                     <div
                       className="cursor-grab active:cursor-grabbing p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-namaha-gold transition flex-shrink-0"
                       title="Drag to reorder"
@@ -513,12 +554,10 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       <GripVertical className="w-4 h-4" />
                     </div>
 
-                    {/* Position Badge */}
                     <div className="w-9 h-9 rounded-xl bg-namaha-gold/20 text-namaha-gold font-bold flex items-center justify-center text-sm flex-shrink-0 border border-namaha-gold/40 shadow-inner">
                       #{idx + 1}
                     </div>
 
-                    {/* Category Title & Status */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h4 className="font-serif font-bold text-sm text-white truncate">{cat.name}</h4>
@@ -538,10 +577,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                     </div>
                   </div>
 
-                  {/* Right: Reorder Controls (Arrows, Order Input, Edit, Delete) */}
                   <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-white/10">
-                    
-                    {/* Order Number Box */}
                     <div className="flex items-center gap-1.5 bg-black/70 px-2.5 py-1 rounded-xl border border-white/20">
                       <span className="text-[10px] text-gray-400 font-bold">Position:</span>
                       <input
@@ -555,7 +591,6 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       />
                     </div>
 
-                    {/* Step Up ⬆️ Button */}
                     <button
                       type="button"
                       disabled={isFirst}
@@ -567,7 +602,6 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       <span className="hidden sm:inline">Up</span>
                     </button>
 
-                    {/* Step Down ⬇️ Button */}
                     <button
                       type="button"
                       disabled={isLast}
@@ -579,7 +613,6 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       <span className="hidden sm:inline">Down</span>
                     </button>
 
-                    {/* Move to Top 🔝 */}
                     <button
                       type="button"
                       disabled={isFirst}
@@ -590,7 +623,6 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       <ChevronsUp className="w-4 h-4" />
                     </button>
 
-                    {/* Move to Bottom 🔻 */}
                     <button
                       type="button"
                       disabled={isLast}
@@ -601,7 +633,6 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       <ChevronsDown className="w-4 h-4" />
                     </button>
 
-                    {/* Edit Category */}
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(cat)}
@@ -611,12 +642,17 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Delete Category */}
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         if (confirm(`Are you sure you want to delete category "${cat.name}"?`)) {
-                          onDeleteCategory(cat.id);
+                          try {
+                            await onDeleteCategory(cat.id);
+                            setSuccessMsg(`Deleted category "${cat.name}" from Supabase!`);
+                            setTimeout(() => setSuccessMsg(''), 3000);
+                          } catch (err: any) {
+                            setErrorMsg(err.message || 'Failed to delete category');
+                          }
                         }
                       }}
                       className="p-1.5 rounded-xl bg-red-950/60 hover:bg-red-600 text-red-300 hover:text-white transition"
@@ -624,7 +660,6 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
-
                   </div>
                 </div>
               );
@@ -633,9 +668,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 2. CARD GRID VIEW */}
-      {/* ======================================================== */}
+      {/* CARD GRID VIEW */}
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {orderedList.map((cat, idx) => (
@@ -695,9 +728,15 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm(`Delete category "${cat.name}"?`)) {
-                        onDeleteCategory(cat.id);
+                        try {
+                          await onDeleteCategory(cat.id);
+                          setSuccessMsg(`Deleted category "${cat.name}" from Supabase!`);
+                          setTimeout(() => setSuccessMsg(''), 3000);
+                        } catch (err: any) {
+                          setErrorMsg(err.message || 'Failed to delete category');
+                        }
                       }
                     }}
                     className="p-2 rounded-lg bg-red-950/50 hover:bg-red-600 transition text-red-300 hover:text-white"

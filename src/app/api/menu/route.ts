@@ -9,7 +9,7 @@ export const fetchCache = 'force-no-store';
 
 export async function GET() {
   try {
-    // 1. Fetch Categories
+    // 1. Fetch Categories from Supabase (Source of Truth)
     let { data: categories, error: catError } = await supabaseAdmin
       .from('categories')
       .select('*')
@@ -19,7 +19,7 @@ export async function GET() {
       console.warn('API /api/menu categories fetch error:', catError);
     }
 
-    // 2. Fetch Menu Items
+    // 2. Fetch Menu Items from Supabase (Source of Truth)
     let { data: menuItems, error: menuError } = await supabaseAdmin
       .from('menu_items')
       .select('*')
@@ -29,24 +29,31 @@ export async function GET() {
       console.warn('API /api/menu items fetch error:', menuError);
     }
 
-    // 3. Fetch Restaurant Info
-    let { data: restaurantInfo } = await supabaseAdmin
+    // 3. Fetch Restaurant Info from Supabase
+    let { data: restaurantInfo, error: infoError } = await supabaseAdmin
       .from('restaurant_info')
       .select('*')
       .limit(1)
       .single();
 
-    // 4. Fetch Gallery
-    let { data: gallery } = await supabaseAdmin
+    if (infoError && infoError.code !== 'PGRST116') {
+      console.warn('API /api/menu restaurant_info fetch error:', infoError);
+    }
+
+    // 4. Fetch Gallery from Supabase
+    let { data: gallery, error: galError } = await supabaseAdmin
       .from('gallery')
       .select('*')
       .order('created_at', { ascending: false });
 
-    // --- AUTO-SEED: If database tables are empty, seed initial data automatically ---
-    let needsReseed = false;
+    if (galError) {
+      console.warn('API /api/menu gallery fetch error:', galError);
+    }
+
+    // --- SEEDING SAFETY: ONLY seed if tables are completely empty (0 records) ---
+    // If Supabase contains existing Admin records, NEVER overwrite them.
 
     if (!categories || categories.length === 0) {
-      needsReseed = true;
       const catSeed = initialCategories.map((c, idx) => ({
         id: c.id,
         name: c.name,
@@ -55,15 +62,18 @@ export async function GET() {
         display_order: c.displayOrder || idx + 1,
         is_enabled: c.isEnabled !== false,
       }));
-      await supabaseAdmin.from('categories').upsert(catSeed);
-      const recheck = await supabaseAdmin.from('categories').select('*').order('display_order', { ascending: true });
-      if (recheck.data && recheck.data.length > 0) {
-        categories = recheck.data;
+      const { error: seedCatErr } = await supabaseAdmin.from('categories').upsert(catSeed, { onConflict: 'id' });
+      if (!seedCatErr) {
+        const recheck = await supabaseAdmin.from('categories').select('*').order('display_order', { ascending: true });
+        if (recheck.data && recheck.data.length > 0) {
+          categories = recheck.data;
+        }
+      } else {
+        console.error('API /api/menu initial categories seed error:', seedCatErr);
       }
     }
 
     if (!menuItems || menuItems.length === 0) {
-      needsReseed = true;
       const itemSeed = initialMenuItems.map((item, idx) => ({
         id: item.id,
         name: item.name,
@@ -83,15 +93,19 @@ export async function GET() {
         chef_recommendation: item.chefRecommendation || '',
         display_order: item.displayOrder || idx + 1,
       }));
-      await supabaseAdmin.from('menu_items').upsert(itemSeed);
-      const recheckItems = await supabaseAdmin.from('menu_items').select('*').order('display_order', { ascending: true });
-      if (recheckItems.data && recheckItems.data.length > 0) {
-        menuItems = recheckItems.data;
+      const { error: seedItemErr } = await supabaseAdmin.from('menu_items').upsert(itemSeed, { onConflict: 'id' });
+      if (!seedItemErr) {
+        const recheckItems = await supabaseAdmin.from('menu_items').select('*').order('display_order', { ascending: true });
+        if (recheckItems.data && recheckItems.data.length > 0) {
+          menuItems = recheckItems.data;
+        }
+      } else {
+        console.error('API /api/menu initial items seed error:', seedItemErr);
       }
     }
 
     if (!restaurantInfo) {
-      await supabaseAdmin.from('restaurant_info').upsert({
+      const { error: seedInfoErr } = await supabaseAdmin.from('restaurant_info').upsert({
         id: 1,
         name: defaultRestaurantInfo.name,
         tagline: defaultRestaurantInfo.tagline,
@@ -110,10 +124,15 @@ export async function GET() {
         announcement_text: defaultRestaurantInfo.announcementText,
         is_restaurant_open: defaultRestaurantInfo.isRestaurantOpen,
         copyright_text: defaultRestaurantInfo.copyrightText,
-      });
-      const recheckInfo = await supabaseAdmin.from('restaurant_info').select('*').limit(1).single();
-      if (recheckInfo.data) {
-        restaurantInfo = recheckInfo.data;
+      }, { onConflict: 'id' });
+
+      if (!seedInfoErr) {
+        const recheckInfo = await supabaseAdmin.from('restaurant_info').select('*').limit(1).single();
+        if (recheckInfo.data) {
+          restaurantInfo = recheckInfo.data;
+        }
+      } else {
+        console.error('API /api/menu initial restaurant_info seed error:', seedInfoErr);
       }
     }
 
@@ -125,10 +144,14 @@ export async function GET() {
         category: g.category,
         is_enabled: g.isEnabled !== false,
       }));
-      await supabaseAdmin.from('gallery').upsert(galSeed);
-      const recheckGal = await supabaseAdmin.from('gallery').select('*').order('created_at', { ascending: false });
-      if (recheckGal.data && recheckGal.data.length > 0) {
-        gallery = recheckGal.data;
+      const { error: seedGalErr } = await supabaseAdmin.from('gallery').upsert(galSeed, { onConflict: 'id' });
+      if (!seedGalErr) {
+        const recheckGal = await supabaseAdmin.from('gallery').select('*').order('created_at', { ascending: false });
+        if (recheckGal.data && recheckGal.data.length > 0) {
+          gallery = recheckGal.data;
+        }
+      } else {
+        console.error('API /api/menu initial gallery seed error:', seedGalErr);
       }
     }
 
@@ -155,11 +178,11 @@ export async function GET() {
   } catch (err: any) {
     console.error('API /api/menu exception:', err);
     return NextResponse.json(
-      { success: false, error: err.message || 'Error fetching menu' },
+      { success: false, error: err.message || 'Error fetching menu from Supabase' },
       {
         status: 500,
         headers: {
-          'Cache-Control': 'no-store',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
         },
       }
     );

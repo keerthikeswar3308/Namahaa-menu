@@ -42,11 +42,13 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ item, onClose 
             alt={item.name}
             fill
             unoptimized
-            onError={() =>
-              setImgSrc(
-                'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'
-              )
-            }
+            onError={() => {
+              if (!imgSrc.includes('unsplash')) {
+                setImgSrc(
+                  'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'
+                );
+              }
+            }}
             className="object-cover"
             priority
           />

@@ -30,11 +30,13 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onOpenDetails }) => {
           alt={item.name}
           fill
           unoptimized
-          onError={() =>
-            setImgSrc(
-              'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'
-            )
-          }
+          onError={() => {
+            if (!imgSrc.includes('unsplash')) {
+              setImgSrc(
+                'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80'
+              );
+            }
+          }}
           className="object-cover transition-transform duration-500 group-hover:scale-110"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         />

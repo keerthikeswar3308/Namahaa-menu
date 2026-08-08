@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   ADMIN_AUTH: 'namahaa_admin_auth',
 };
 
-// Helper for local storage access in SSR safe manner
+// Helper for local storage access in SSR safe manner (used only as temporary read-through cache)
 function getStoredItem<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
   try {
@@ -38,34 +38,56 @@ function notifyStoreUpdated(): void {
   window.dispatchEvent(new CustomEvent('namahaa_store_updated'));
 }
 
-function getAdminPasscode(): string {
-  if (typeof window === 'undefined') return 'namahaa2026';
-  return localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026';
+function getAdminAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (typeof window !== 'undefined') {
+    const passcode = localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026';
+    headers['x-admin-passcode'] = passcode;
+    headers['x-admin-auth'] = passcode;
+    const token = sessionStorage.getItem('namahaa_admin_token');
+    if (token) {
+      headers['x-admin-token'] = token;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  return headers;
 }
 
-async function callAdminSyncApi(payload: Record<string, any>): Promise<boolean> {
+/**
+ * Sends a mutation payload to the secure Next.js Server API route (/api/admin/sync-menu)
+ * and returns success status with detailed error messages if Supabase fails.
+ */
+async function callAdminSyncApi(
+  payload: Record<string, any>
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const passcode = getAdminPasscode();
     const res = await fetch('/api/admin/sync-menu', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-passcode': passcode,
-      },
+      headers: getAdminAuthHeaders(),
       body: JSON.stringify(payload),
     });
+
     const data = await res.json();
-    return Boolean(data.success);
-  } catch (err) {
-    console.warn('callAdminSyncApi notice:', err);
-    return false;
+    if (res.ok && data.success) {
+      return { success: true };
+    }
+
+    const errorMsg = data.error || `Server sync failed with HTTP status ${res.status}`;
+    console.error('callAdminSyncApi failed:', errorMsg);
+    return { success: false, error: errorMsg };
+  } catch (err: any) {
+    const message = err.message || 'Network error communicating with sync server';
+    console.error('callAdminSyncApi exception:', err);
+    return { success: false, error: message };
   }
 }
 
 export class NamahaStore {
-  // ==========================================
-  // 0. UNIVERSAL CROSS-DEVICE SYNC
-  // ==========================================
+  // =========================================================================
+  // 0. UNIVERSAL CROSS-DEVICE SYNC (SUPABASE AUTHORITATIVE SOURCE OF TRUTH)
+  // =========================================================================
   static async syncAllFromSupabase(): Promise<{
     items: MenuItem[];
     categories: Category[];
@@ -84,7 +106,7 @@ export class NamahaStore {
       if (res.ok) {
         const json = await res.json();
         if (json.success) {
-          // 1. Categories
+          // 1. Categories from Supabase
           if (json.categories && json.categories.length > 0) {
             const mappedCats: Category[] = json.categories.map((c: any, idx: number) => ({
               id: c.id,
@@ -97,16 +119,18 @@ export class NamahaStore {
             this.setCategories(mappedCats);
           }
 
-          // 2. Menu Items
+          // 2. Menu Items from Supabase
           if (json.items && json.items.length > 0) {
             const mappedItems: MenuItem[] = json.items.map((d: any, idx: number) => ({
               id: d.id,
               name: d.name,
               description: d.description || '',
               price: Number(d.price),
-              categoryId: d.category_id || `cat-${d.category_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
+              categoryId:
+                d.category_id ||
+                `cat-${d.category_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
               categoryName: d.category_name || '',
-              image: d.image || d.image_url || 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+              image: d.image_url || d.image || '',
               isVeg: d.is_veg !== false,
               preparationTime: d.preparation_time || '10 mins',
               isAvailable: d.is_available !== false,
@@ -120,7 +144,7 @@ export class NamahaStore {
             this.setMenuItems(mappedItems);
           }
 
-          // 3. Restaurant Info
+          // 3. Restaurant Info from Supabase
           if (json.restaurantInfo) {
             const d = json.restaurantInfo;
             const mappedInfo: RestaurantInfo = {
@@ -147,7 +171,7 @@ export class NamahaStore {
             setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, mappedInfo);
           }
 
-          // 4. Gallery
+          // 4. Gallery from Supabase
           if (json.gallery && json.gallery.length > 0) {
             const mappedGal: GalleryImage[] = json.gallery.map((g: any) => ({
               id: g.id,
@@ -180,9 +204,9 @@ export class NamahaStore {
     };
   }
 
-  // ==========================================
-  // 1. MENU ITEMS CRUD (SUPABASE + LOCAL CACHE)
-  // ==========================================
+  // =========================================================================
+  // 1. MENU ITEMS CRUD (SUPABASE PERSISTENCE FIRST)
+  // =========================================================================
   static getMenuItems(): MenuItem[] {
     return getStoredItem<MenuItem[]>(STORAGE_KEYS.MENU_ITEMS, initialMenuItems);
   }
@@ -202,19 +226,25 @@ export class NamahaStore {
     const newItem: MenuItem = {
       ...item,
       image: finalImage,
-      displayOrder: item.displayOrder || (items.length + 1),
+      displayOrder: item.displayOrder || items.length + 1,
       id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     };
-    const updated = [...items, newItem];
-    this.setMenuItems(updated);
-    notifyStoreUpdated();
 
-    // Persist via Server API Route
-    await callAdminSyncApi({
+    // 1. Send data to secure server API to write to Supabase
+    const syncRes = await callAdminSyncApi({
       items: [newItem],
       categories: this.getCategories(),
       mode: 'merge',
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to save menu item to Supabase');
+    }
+
+    // 2. Supabase confirmed success: update local cache & notify
+    const updated = [...items, newItem];
+    this.setMenuItems(updated);
+    notifyStoreUpdated();
 
     // Cross-sync with Gallery if matching title exists
     this.crossSyncMenuToGallery(newItem.name, newItem.image);
@@ -232,23 +262,31 @@ export class NamahaStore {
       finalImage = await ensureCloudUrl(updates.image);
     }
 
-    const updatedItem = {
+    const updatedItem: MenuItem = {
       ...items[index],
       ...updates,
       ...(finalImage ? { image: finalImage } : {}),
-      displayOrder: updates.displayOrder !== undefined ? updates.displayOrder : (items[index].displayOrder || (index + 1)),
+      displayOrder:
+        updates.displayOrder !== undefined
+          ? updates.displayOrder
+          : items[index].displayOrder || index + 1,
     };
 
-    items[index] = updatedItem;
-    this.setMenuItems(items);
-    notifyStoreUpdated();
-
-    // Persist via Server API Route
-    await callAdminSyncApi({
+    // 1. Send data to secure server API to write to Supabase
+    const syncRes = await callAdminSyncApi({
       items: [updatedItem],
       categories: this.getCategories(),
       mode: 'merge',
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to update menu item "${updatedItem.name}" in Supabase`);
+    }
+
+    // 2. Supabase confirmed success: update local state & notify
+    items[index] = updatedItem;
+    this.setMenuItems(items);
+    notifyStoreUpdated();
 
     // Cross-sync with Gallery if image changed
     if (updatedItem.image) {
@@ -258,72 +296,89 @@ export class NamahaStore {
     return updatedItem;
   }
 
-  static deleteMenuItem(id: string): boolean {
+  static async deleteMenuItem(id: string): Promise<boolean> {
     const items = this.getMenuItems();
     const itemToDelete = items.find((i) => i.id === id);
-    const filtered = items.filter((i) => i.id !== id);
-    if (filtered.length === items.length) return false;
-    this.setMenuItems(filtered);
-    notifyStoreUpdated();
+    if (!itemToDelete) return false;
 
-    if (itemToDelete?.image && itemToDelete.image.includes('food-menu-images')) {
-      deleteImageViaAdminApi(itemToDelete.image);
-    }
-
-    // Persist via Server API Route
-    callAdminSyncApi({
+    // 1. Persist deletion via Server API Route in Supabase
+    const syncRes = await callAdminSyncApi({
       deleteItemId: id,
     });
 
-    if (isSupabaseConfigured()) {
-      supabase.from('menu_items').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error('Supabase delete item error:', error);
-      });
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to delete menu item from Supabase`);
     }
+
+    // 2. Remove image from storage bucket if stored in food-images
+    if (itemToDelete.image && itemToDelete.image.includes('food-images')) {
+      deleteImageViaAdminApi(itemToDelete.image);
+    }
+
+    // 3. Supabase confirmed: filter local state & notify
+    const filtered = items.filter((i) => i.id !== id);
+    this.setMenuItems(filtered);
+    notifyStoreUpdated();
 
     return true;
   }
 
-  static resetMenuItems(): void {
-    this.setMenuItems(initialMenuItems);
-    this.setCategories(initialCategories);
-    notifyStoreUpdated();
-    callAdminSyncApi({
+  static async resetMenuItems(): Promise<void> {
+    const syncRes = await callAdminSyncApi({
       items: initialMenuItems,
       categories: initialCategories,
       mode: 'replace',
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to reset menu in Supabase');
+    }
+
+    this.setMenuItems(initialMenuItems);
+    this.setCategories(initialCategories);
+    notifyStoreUpdated();
   }
 
-  static clearAllMenuItems(): void {
-    this.setMenuItems([]);
-    notifyStoreUpdated();
-    callAdminSyncApi({
+  static async clearAllMenuItems(): Promise<void> {
+    const syncRes = await callAdminSyncApi({
       items: [],
       mode: 'replace',
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to clear menu items in Supabase');
+    }
+
+    this.setMenuItems([]);
+    notifyStoreUpdated();
   }
 
-  static async replaceAllMenuItems(newItems: MenuItem[], newCategories?: Category[]): Promise<boolean> {
+  static async replaceAllMenuItems(
+    newItems: MenuItem[],
+    newCategories?: Category[]
+  ): Promise<boolean> {
+    const syncRes = await callAdminSyncApi({
+      items: newItems,
+      categories: newCategories || this.getCategories(),
+      mode: 'replace',
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to replace menu items in Supabase');
+    }
+
     if (newCategories && newCategories.length > 0) {
       this.setCategories(newCategories);
     }
     this.setMenuItems(newItems);
     notifyStoreUpdated();
 
-    // Persist via Server API Route
-    const success = await callAdminSyncApi({
-      items: newItems,
-      categories: newCategories || this.getCategories(),
-      mode: 'replace',
-    });
-
-    return success;
+    return true;
   }
 
-  // ==========================================
-  // 2. CATEGORIES CRUD (SUPABASE + LOCAL CACHE)
-  // ==========================================
+  // =========================================================================
+  // 2. CATEGORIES CRUD (SUPABASE PERSISTENCE FIRST)
+  // =========================================================================
   static getCategories(): Category[] {
     return getStoredItem<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
   }
@@ -337,68 +392,91 @@ export class NamahaStore {
     return data.categories;
   }
 
-  static addCategory(category: Omit<Category, 'id'>): Category {
+  static async addCategory(category: Omit<Category, 'id'>): Promise<Category> {
     const categories = this.getCategories();
     const newCategory: Category = {
       ...category,
       id: `cat-${Date.now()}`,
     };
     const updated = [...categories, newCategory];
-    this.setCategories(updated);
-    notifyStoreUpdated();
 
-    callAdminSyncApi({
+    const syncRes = await callAdminSyncApi({
       categories: updated,
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to add category "${newCategory.name}" to Supabase`);
+    }
+
+    this.setCategories(updated);
+    notifyStoreUpdated();
 
     return newCategory;
   }
 
-  static updateCategory(id: string, updates: Partial<Category>): Category | null {
+  static async updateCategory(id: string, updates: Partial<Category>): Promise<Category | null> {
     const categories = this.getCategories();
     const index = categories.findIndex((c) => c.id === id);
     if (index === -1) return null;
-    const updated = { ...categories[index], ...updates };
+
+    const updated: Category = { ...categories[index], ...updates };
+
+    const syncRes = await callAdminSyncApi({
+      categories: [updated],
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to update category "${updated.name}" in Supabase`);
+    }
+
     categories[index] = updated;
     this.setCategories(categories);
     notifyStoreUpdated();
 
-    callAdminSyncApi({
-      categories: [updated],
-    });
-
     return updated;
   }
 
-  static deleteCategory(id: string): boolean {
+  static async deleteCategory(id: string): Promise<boolean> {
     const categories = this.getCategories();
+    const exists = categories.some((c) => c.id === id);
+    if (!exists) return false;
+
+    const syncRes = await callAdminSyncApi({
+      deleteCategoryId: id,
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to delete category from Supabase');
+    }
+
     const filtered = categories.filter((c) => c.id !== id);
     this.setCategories(filtered);
     notifyStoreUpdated();
 
-    callAdminSyncApi({
-      deleteCategoryId: id,
-    });
-
     return true;
   }
 
-  static reorderCategories(reorderedCategories: Category[]): void {
+  static async reorderCategories(reorderedCategories: Category[]): Promise<void> {
     const updated = reorderedCategories.map((c, index) => ({
       ...c,
       displayOrder: index + 1,
     }));
-    this.setCategories(updated);
-    notifyStoreUpdated();
 
-    callAdminSyncApi({
+    const syncRes = await callAdminSyncApi({
       categories: updated,
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to save reordered categories to Supabase');
+    }
+
+    this.setCategories(updated);
+    notifyStoreUpdated();
   }
 
-  // ==========================================
-  // 3. RESTAURANT INFO (SUPABASE + LOCAL CACHE)
-  // ==========================================
+  // =========================================================================
+  // 3. RESTAURANT INFO (SUPABASE PERSISTENCE FIRST)
+  // =========================================================================
   static getRestaurantInfo(): RestaurantInfo {
     return getStoredItem<RestaurantInfo>(STORAGE_KEYS.RESTAURANT_INFO, defaultRestaurantInfo);
   }
@@ -408,22 +486,27 @@ export class NamahaStore {
     return data.restaurantInfo || this.getRestaurantInfo();
   }
 
-  static updateRestaurantInfo(info: Partial<RestaurantInfo>): RestaurantInfo {
+  static async updateRestaurantInfo(info: Partial<RestaurantInfo>): Promise<RestaurantInfo> {
     const current = this.getRestaurantInfo();
-    const updated = { ...current, ...info };
-    setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, updated);
-    notifyStoreUpdated();
+    const updated: RestaurantInfo = { ...current, ...info };
 
-    callAdminSyncApi({
+    const syncRes = await callAdminSyncApi({
       restaurantInfo: updated,
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to update restaurant info in Supabase');
+    }
+
+    setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, updated);
+    notifyStoreUpdated();
 
     return updated;
   }
 
-  // ==========================================
-  // 4. GALLERY CRUD (SUPABASE + LOCAL CACHE)
-  // ==========================================
+  // =========================================================================
+  // 4. GALLERY CRUD (SUPABASE PERSISTENCE FIRST)
+  // =========================================================================
   static getGallery(): GalleryImage[] {
     return getStoredItem<GalleryImage[]>(STORAGE_KEYS.GALLERY, defaultGalleryImages);
   }
@@ -445,20 +528,28 @@ export class NamahaStore {
       url: finalUrl,
       id: `gal-${Date.now()}`,
     };
+
+    const syncRes = await callAdminSyncApi({
+      gallery: [newImg],
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to add gallery image "${newImg.title}" to Supabase`);
+    }
+
     const updated = [newImg, ...gallery];
     this.setGallery(updated);
     notifyStoreUpdated();
-
-    callAdminSyncApi({
-      gallery: [newImg],
-    });
 
     this.crossSyncGalleryToMenu(newImg.title, newImg.url);
 
     return newImg;
   }
 
-  static async updateGalleryImage(id: string, updates: Partial<GalleryImage>): Promise<GalleryImage | null> {
+  static async updateGalleryImage(
+    id: string,
+    updates: Partial<GalleryImage>
+  ): Promise<GalleryImage | null> {
     const gallery = this.getGallery();
     const index = gallery.findIndex((g) => g.id === id);
     if (index === -1) return null;
@@ -468,18 +559,23 @@ export class NamahaStore {
       finalUrl = await ensureCloudUrl(updates.url);
     }
 
-    const updated = {
+    const updated: GalleryImage = {
       ...gallery[index],
       ...updates,
       ...(finalUrl ? { url: finalUrl } : {}),
     };
+
+    const syncRes = await callAdminSyncApi({
+      gallery: [updated],
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to update gallery image "${updated.title}" in Supabase`);
+    }
+
     gallery[index] = updated;
     this.setGallery(gallery);
     notifyStoreUpdated();
-
-    callAdminSyncApi({
-      gallery: [updated],
-    });
 
     if (updated.url) {
       this.crossSyncGalleryToMenu(updated.title, updated.url);
@@ -489,89 +585,71 @@ export class NamahaStore {
   }
 
   static async resetGalleryToDefault(): Promise<GalleryImage[]> {
-    this.setGallery(defaultGalleryImages);
-    notifyStoreUpdated();
-
-    callAdminSyncApi({
+    const syncRes = await callAdminSyncApi({
       gallery: defaultGalleryImages,
     });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to reset gallery in Supabase');
+    }
+
+    this.setGallery(defaultGalleryImages);
+    notifyStoreUpdated();
 
     return defaultGalleryImages;
   }
 
-  static deleteGalleryImage(id: string): boolean {
+  static async deleteGalleryImage(id: string): Promise<boolean> {
     const gallery = this.getGallery();
     const imgToDelete = gallery.find((g) => g.id === id);
-    const filtered = gallery.filter((g) => g.id !== id);
-    if (filtered.length === gallery.length) return false;
-    this.setGallery(filtered);
-    notifyStoreUpdated();
+    if (!imgToDelete) return false;
 
-    if (imgToDelete?.url && imgToDelete.url.includes('food-menu-images')) {
+    const syncRes = await callAdminSyncApi({
+      deleteGalleryId: id,
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to delete gallery image from Supabase');
+    }
+
+    if (imgToDelete.url && imgToDelete.url.includes('food-images')) {
       deleteImageViaAdminApi(imgToDelete.url);
     }
 
-    callAdminSyncApi({
-      deleteGalleryId: id,
-    });
+    const filtered = gallery.filter((g) => g.id !== id);
+    this.setGallery(filtered);
+    notifyStoreUpdated();
 
     return true;
   }
 
-  // ==========================================
-  // 5. CROSS-TABLE AUTOMATIC SYNCHRONIZATION
-  // ==========================================
+  // =========================================================================
+  // 5. CROSS-TABLE SYNCHRONIZATION HELPERS
+  // =========================================================================
   private static crossSyncGalleryToMenu(title: string, imageUrl: string): void {
     if (!title || !imageUrl) return;
     const items = this.getMenuItems();
-    const match = items.find((i) => i.name.trim().toLowerCase() === title.trim().toLowerCase());
+    const match = items.find(
+      (i) => i.name.trim().toLowerCase() === title.trim().toLowerCase()
+    );
     if (match && match.image !== imageUrl) {
-      this.updateMenuItem(match.id, { image: imageUrl });
+      this.updateMenuItem(match.id, { image: imageUrl }).catch((err) =>
+        console.warn('crossSyncGalleryToMenu non-blocking error:', err)
+      );
     }
   }
 
   private static crossSyncMenuToGallery(name: string, imageUrl: string): void {
     if (!name || !imageUrl) return;
     const gallery = this.getGallery();
-    const match = gallery.find((g) => g.title.trim().toLowerCase() === name.trim().toLowerCase());
+    const match = gallery.find(
+      (g) => g.title.trim().toLowerCase() === name.trim().toLowerCase()
+    );
     if (match && match.url !== imageUrl) {
-      this.updateGalleryImage(match.id, { url: imageUrl });
+      this.updateGalleryImage(match.id, { url: imageUrl }).catch((err) =>
+        console.warn('crossSyncMenuToGallery non-blocking error:', err)
+      );
     }
-  }
-
-  static async seedSouthIndianDishPhotos(): Promise<number> {
-    const dishImageMap: Record<string, string> = {
-      'vada': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80',
-      'perugu vada': 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
-      'benne': 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80',
-      'pesarattu': 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&auto=format&fit=crop&q=80',
-      'ravva': 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=800&auto=format&fit=crop&q=80',
-      'pongal': 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80',
-      'thatte': 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800&auto=format&fit=crop&q=80',
-    };
-
-    let count = 0;
-    const items = this.getMenuItems();
-    for (let idx = 0; idx < items.length; idx++) {
-      const item = items[idx];
-      const lower = item.name.toLowerCase();
-      let selectedUrl = '';
-      if (lower.includes('perugu vada')) selectedUrl = dishImageMap['perugu vada'];
-      else if (lower.includes('vada')) selectedUrl = dishImageMap['vada'];
-      else if (lower.includes('benne')) selectedUrl = dishImageMap['benne'];
-      else if (lower.includes('pesarattu')) selectedUrl = dishImageMap['pesarattu'];
-      else if (lower.includes('ravva')) selectedUrl = dishImageMap['ravva'];
-      else if (lower.includes('pongal')) selectedUrl = dishImageMap['pongal'];
-      else if (lower.includes('thatte')) selectedUrl = dishImageMap['thatte'];
-
-      if (selectedUrl && item.image !== selectedUrl) {
-        await this.updateMenuItem(item.id, { image: selectedUrl, displayOrder: idx + 1 });
-        count++;
-      }
-    }
-
-    notifyStoreUpdated();
-    return count;
   }
 
   static async syncAllMenuItemsToSupabase(): Promise<number> {
@@ -580,7 +658,7 @@ export class NamahaStore {
     const info = this.getRestaurantInfo();
     const gallery = this.getGallery();
 
-    await callAdminSyncApi({
+    const syncRes = await callAdminSyncApi({
       items,
       categories,
       restaurantInfo: info,
@@ -588,13 +666,17 @@ export class NamahaStore {
       mode: 'replace',
     });
 
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || 'Failed to sync all menu items to Supabase');
+    }
+
     notifyStoreUpdated();
     return items.length;
   }
 
-  // ==========================================
+  // =========================================================================
   // 6. REALTIME DB & MULTI-TAB SUBSCRIPTIONS
-  // ==========================================
+  // =========================================================================
   static subscribeToRealtimeChanges(onUpdate: () => void): () => void {
     if (typeof window === 'undefined') return () => {};
 
@@ -623,12 +705,14 @@ export class NamahaStore {
     };
   }
 
-  // ==========================================
+  // =========================================================================
   // 7. TABLE SESSION
-  // ==========================================
+  // =========================================================================
   static getSelectedTable(): number | null {
     if (typeof window === 'undefined') return null;
-    const val = sessionStorage.getItem(STORAGE_KEYS.TABLE_NUMBER) || localStorage.getItem(STORAGE_KEYS.TABLE_NUMBER);
+    const val =
+      sessionStorage.getItem(STORAGE_KEYS.TABLE_NUMBER) ||
+      localStorage.getItem(STORAGE_KEYS.TABLE_NUMBER);
     return val ? parseInt(val, 10) : null;
   }
 
@@ -644,20 +728,28 @@ export class NamahaStore {
     localStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
   }
 
-  // ==========================================
+  // =========================================================================
   // 8. ADMIN AUTH
-  // ==========================================
+  // =========================================================================
   static isAdminLoggedIn(): boolean {
     if (typeof window === 'undefined') return false;
-    return localStorage.getItem(STORAGE_KEYS.ADMIN_AUTH) === 'true';
+    const hasAuth = localStorage.getItem(STORAGE_KEYS.ADMIN_AUTH) === 'true';
+    const hasToken = Boolean(sessionStorage.getItem('namahaa_admin_token'));
+    return hasAuth || hasToken;
   }
 
-  static setAdminLoggedIn(status: boolean): void {
+  static setAdminLoggedIn(status: boolean, token?: string): void {
     if (typeof window === 'undefined') return;
     if (status) {
       localStorage.setItem(STORAGE_KEYS.ADMIN_AUTH, 'true');
+      if (token) {
+        sessionStorage.setItem('namahaa_admin_token', token);
+      }
     } else {
       localStorage.removeItem(STORAGE_KEYS.ADMIN_AUTH);
+      sessionStorage.removeItem('namahaa_admin_token');
+      // Call server logout route to clear HttpOnly cookie
+      fetch('/api/admin/auth', { method: 'DELETE' }).catch(() => {});
     }
   }
 }

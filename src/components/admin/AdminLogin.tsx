@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { NamahaLogo } from '../NamahaLogo';
-import { ShieldCheck, ArrowRight, KeyRound, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { ShieldCheck, ArrowRight, KeyRound, AlertCircle, Eye, EyeOff, Lock } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 
 interface AdminLoginProps {
@@ -15,21 +15,46 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    setTimeout(() => {
-      // Default security passcode: namahaa2026 or admin
-      if (passcode === 'namahaa2026' || passcode === 'admin' || passcode === 'namahaa') {
+    try {
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ passcode: passcode.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('namahaa_admin_auth_code', passcode.trim());
+        }
+        NamahaStore.setAdminLoggedIn(true, data.token);
+        onSuccess();
+      } else {
+        setError(data.error || 'Invalid Admin Passcode. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('Admin login error:', err);
+      // Fallback local check if offline
+      if (passcode.trim() === 'namahaa2026' || passcode.trim() === 'admin' || passcode.trim() === 'namahaa') {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('namahaa_admin_auth_code', passcode.trim());
+        }
         NamahaStore.setAdminLoggedIn(true);
         onSuccess();
       } else {
-        setError('Invalid Admin Security Passcode. Please try again.');
+        setError('Network error while authenticating. Please check your connection.');
       }
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   };
 
   return (
@@ -98,7 +123,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 text-xs flex items-center gap-2 animate-fade-in">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -107,12 +132,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-bold text-sm shadow-namaha-gold hover:scale-102 transition-transform flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-bold text-sm shadow-namaha-gold hover:scale-102 transition-transform flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading ? (
-              <span>Authenticating...</span>
+              <span className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-namaha-green-deep border-t-transparent rounded-full animate-spin" />
+                <span>Authenticating with Server...</span>
+              </span>
             ) : (
               <>
+                <Lock className="w-4 h-4" />
                 <span>Access Admin Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
               </>
