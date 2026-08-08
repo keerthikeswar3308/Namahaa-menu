@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCart } from '@/lib/cartContext';
-import { X, Plus, Minus, Trash2, ShoppingBag, Heart, ArrowRight, Utensils, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ShoppingBag, Heart, Utensils, AlertCircle } from 'lucide-react';
 import { getFreshImageUrl } from '@/lib/imageUtils';
 import { NamahaStore } from '@/lib/store';
 
@@ -15,14 +15,12 @@ export const CartBottomSheet: React.FC = () => {
     removeFromCart,
     clearCart,
     totalCount,
-    totalPrice,
     toggleWishlist,
     isInWishlist,
   } = useCart();
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
-  const [orderSentMessage, setOrderSentMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedTable(NamahaStore.getSelectedTable());
@@ -42,22 +40,6 @@ export const CartBottomSheet: React.FC = () => {
 
   if (!isCartOpen) return null;
 
-  const handleContinueOrder = () => {
-    if (selectedTable) {
-      setOrderSentMessage(`Order for Table #${selectedTable} confirmed! Preparing fresh dishes.`);
-      setTimeout(() => {
-        setOrderSentMessage(null);
-        closeCart();
-      }, 3500);
-    } else {
-      closeCart();
-      const promptTableBtn = document.querySelector('[data-open-table-modal="true"]') as HTMLButtonElement | null;
-      if (promptTableBtn) {
-        promptTableBtn.click();
-      }
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in">
       
@@ -75,7 +57,7 @@ export const CartBottomSheet: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-serif font-bold text-namaha-gold">
-                Your Cart ({totalCount} {totalCount === 1 ? 'item' : 'items'})
+                Your Cart
               </h2>
               {selectedTable && (
                 <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
@@ -94,14 +76,6 @@ export const CartBottomSheet: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Order confirmation message if triggered */}
-        {orderSentMessage && (
-          <div className="mx-6 mt-4 p-3.5 rounded-2xl bg-emerald-950 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-            <span>{orderSentMessage}</span>
-          </div>
-        )}
 
         {/* Items List Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -137,11 +111,11 @@ export const CartBottomSheet: React.FC = () => {
                     />
                   </div>
 
-                  {/* Item Details */}
+                  {/* Item Details: Name and Individual Line Calculation */}
                   <div className="flex-1 min-w-0">
                     <h3 className="font-serif font-bold text-white text-sm truncate">{item.name}</h3>
                     <p className="text-xs text-namaha-gold font-sans font-bold mt-0.5">
-                      ₹{item.price} <span className="text-[10px] text-gray-400 font-normal">× {quantity} = ₹{lineTotal}</span>
+                      ₹{item.price} × {quantity} = <span className="text-amber-300">₹{lineTotal}</span>
                     </p>
                     
                     {/* Move to wishlist link */}
@@ -185,48 +159,34 @@ export const CartBottomSheet: React.FC = () => {
           )}
         </div>
 
-        {/* Footer Subtotal & Action Bar */}
+        {/* Bottom Cart Actions: TWO SIDE-BY-SIDE BUTTONS (NO OVERALL TOTAL) */}
         {cart.length > 0 && (
-          <div className="px-6 py-4 bg-namaha-green-deep border-t border-white/10 flex-shrink-0 space-y-3">
-            
-            {/* Subtotal row */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-300 font-medium">Subtotal</span>
-              <span className="text-xl font-sans font-extrabold text-namaha-gold">₹{totalPrice}</span>
-            </div>
-
-            {/* Actions Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+          <div className="px-6 py-4 bg-namaha-green-deep border-t border-white/10 flex-shrink-0">
+            <div className="grid grid-cols-2 gap-3 items-center">
+              
+              {/* PRIMARY ACTION: Add More Items */}
               <button
                 type="button"
                 onClick={closeCart}
-                className="w-full py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition text-center"
+                className="w-full py-3 px-3 rounded-2xl bg-gradient-to-r from-namaha-gold via-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-namaha-green-deep font-extrabold text-xs sm:text-sm shadow-xl flex items-center justify-center gap-1.5 transition active:scale-98 border border-white/20"
+                aria-label="Add More Items"
               >
-                + Add More Items
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span className="truncate">Add More Items</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleContinueOrder}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-namaha-gold via-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-namaha-green-deep font-extrabold text-xs sm:text-sm shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98"
-              >
-                <span>Continue (₹{totalPrice})</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Clear Cart Link */}
-            <div className="text-center pt-1">
+              {/* SECONDARY / DESTRUCTIVE ACTION: Clear Cart */}
               <button
                 type="button"
                 onClick={() => setShowClearConfirm(true)}
-                className="text-[11px] text-red-400 hover:text-red-300 font-semibold inline-flex items-center gap-1 transition opacity-80 hover:opacity-100"
+                className="w-full py-3 px-3 rounded-2xl bg-white/10 hover:bg-red-950/80 text-gray-300 hover:text-red-300 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 active:scale-98 border border-white/15 hover:border-red-500/40"
+                aria-label="Clear Cart"
               >
-                <Trash2 className="w-3 h-3" />
-                <span>Clear Cart</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="truncate">Clear Cart</span>
               </button>
-            </div>
 
+            </div>
           </div>
         )}
 
