@@ -12,7 +12,7 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ info }) => {
   return (
-    <footer className="bg-namaha-green-deep border-t border-namaha-gold/30 pt-16 pb-12 px-4 sm:px-6 lg:px-8 text-white relative shadow-2xl">
+    <footer className="bg-namaha-green-deep border-t border-namaha-gold/30 pt-16 pb-24 sm:pb-12 px-4 sm:px-6 lg:px-8 text-white relative shadow-2xl">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
         
         {/* Col 1: Brand Logo & Tagline */}
@@ -120,6 +120,13 @@ export const Footer: React.FC<FooterProps> = ({ info }) => {
           <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500" />
           <span>for Authentic South Indian Food Lovers</span>
         </div>
+      </div>
+
+      {/* Subtle Developer Credit */}
+      <div className="max-w-7xl mx-auto mt-6 pt-4 border-t border-white/5 text-center">
+        <p className="text-[11px] text-gray-400/80 font-normal tracking-wide">
+          Developed by Keerthikeswar
+        </p>
       </div>
     </footer>
   );

@@ -150,8 +150,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
         </form>
 
         {/* Note */}
-        <div className="mt-6 pt-4 border-t border-white/10 text-[11px] text-gray-400">
-          Namahaa Tiffin Room Management Security System
+        <div className="mt-6 pt-4 border-t border-white/10 text-center space-y-1">
+          <p className="text-[11px] text-gray-400">
+            Namahaa Tiffin Room Management Security System
+          </p>
+          <p className="text-[10px] text-gray-400/80 font-normal tracking-wide">
+            Developed by Keerthikeswar
+          </p>
         </div>
       </div>
     </div>

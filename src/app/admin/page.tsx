@@ -392,8 +392,13 @@ export default function AdminPage() {
       </main>
 
       {/* Admin Footer */}
-      <footer className="bg-namaha-green-dark border-t border-white/10 py-4 px-4 text-center text-xs text-gray-400">
-        Namahaa Tiffin Room • Secure Admin System & Supabase Live Engine © 2026
+      <footer className="bg-namaha-green-dark border-t border-white/10 py-5 px-4 text-center space-y-1">
+        <p className="text-xs text-gray-400">
+          Namahaa Tiffin Room • Secure Admin System & Supabase Live Engine © 2026
+        </p>
+        <p className="text-[11px] text-gray-400/80 font-normal tracking-wide">
+          Developed by Keerthikeswar
+        </p>
       </footer>
 
     </div>
