@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NamahaLogo } from './NamahaLogo';
 import { NamahaStore } from '@/lib/store';
 import { Utensils, CheckCircle2, Sparkles, X } from 'lucide-react';
@@ -20,6 +20,10 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
 }) => {
   const [selected, setSelected] = useState<number | null>(currentTable);
 
+  useEffect(() => {
+    setSelected(currentTable);
+  }, [currentTable, isOpen]);
+
   if (!isOpen) return null;
 
   const handleSelect = (num: number) => {
@@ -34,17 +38,29 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
   const tables = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) {
+          onClose();
+        }
+      }}
+    >
       <div className="relative w-full max-w-2xl bg-white dark:bg-namaha-green-dark border-2 border-amber-500/40 dark:border-namaha-gold/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-center text-slate-800 dark:text-white overflow-hidden my-auto">
         
-        {/* Close Button if table is already selected */}
-        {currentTable && onClose && (
+        {/* Top-Right Close (X) Button */}
+        {onClose && (
           <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-namaha-gold transition"
-            aria-label="Close"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="absolute top-4 right-4 z-30 min-w-[42px] min-h-[42px] p-2.5 rounded-full bg-slate-100 dark:bg-white/15 hover:bg-slate-200 dark:hover:bg-white/25 active:scale-90 text-slate-700 dark:text-namaha-gold transition shadow-md flex items-center justify-center cursor-pointer touch-manipulation"
+            aria-label="Close Table Selector"
+            title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 pointer-events-none" />
           </button>
         )}
 

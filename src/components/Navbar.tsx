@@ -61,7 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Link href="/" className="flex items-center gap-2.5 group">
               <NamahaLogo variant="circle" size="sm" className="w-8 h-8 shadow-sm flex-shrink-0" />
               <div className="flex flex-col">
-                <span className="text-[15px] leading-tight font-serif font-bold text-namaha-gold-warm dark:text-namaha-gold tracking-wide group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
+                <span className="text-[17px] sm:text-[18px] leading-tight font-serif font-bold text-namaha-gold-warm dark:text-namaha-gold tracking-wide group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
                   {restaurantName}
                 </span>
                 <span className="text-[9.5px] leading-tight uppercase text-namaha-green-bright dark:text-emerald-300 tracking-wider font-sans font-extrabold">
