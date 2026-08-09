@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { NamahaLogo } from './NamahaLogo';
-import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart, ShoppingBag } from 'lucide-react';
+import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart, ShoppingBag, ChevronDown } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 import { useTheme } from '@/lib/theme';
 import { useCart } from '@/lib/cartContext';
@@ -44,14 +44,108 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
+      className={`sticky top-0 left-0 right-0 z-40 transition-all duration-300 ${
         isScrolled
-          ? 'bg-white/95 dark:bg-namaha-green-dark/95 backdrop-blur-md shadow-md py-2.5 border-b border-namaha-green-DEFAULT/10 dark:border-namaha-gold/20'
-          : 'bg-gradient-to-b from-white/90 dark:from-namaha-green-deep/90 via-white/50 dark:via-namaha-green-deep/50 to-transparent py-4'
+          ? 'bg-white/95 dark:bg-namaha-green-dark/95 backdrop-blur-md shadow-md border-b border-namaha-green-DEFAULT/10 dark:border-namaha-gold/20'
+          : 'bg-white/95 dark:bg-namaha-green-deep/95 backdrop-blur-md shadow-sm border-b border-emerald-950/10 dark:border-namaha-gold/20'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
+        
+        {/* ======================================================== */}
+        {/* MOBILE TOP HEADER (< md)                                 */}
+        {/* ======================================================== */}
+        <div className="md:hidden flex flex-col">
+          {/* ROW 1: Logo + Brand Title (Left) & Hamburger Menu (Right) */}
+          <div className="flex items-center justify-between py-2">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <NamahaLogo variant="circle" size="sm" className="w-8 h-8 shadow-sm flex-shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[15px] leading-tight font-serif font-bold text-namaha-gold-warm dark:text-namaha-gold tracking-wide group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
+                  {restaurantName}
+                </span>
+                <span className="text-[9.5px] leading-tight uppercase text-namaha-green-bright dark:text-emerald-300 tracking-wider font-sans font-extrabold">
+                  Pure Veg • Digital QR Menu
+                </span>
+              </div>
+            </Link>
+
+            {/* Mobile Hamburger / Menu Toggle */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-1.5 rounded-lg bg-namaha-green-deep/5 dark:bg-white/10 text-namaha-green-deep dark:text-white hover:bg-namaha-green-deep/10 dark:hover:bg-white/20 transition active:scale-95"
+              aria-label="Toggle Navigation Menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <MenuIcon className="w-5 h-5" />}
+            </button>
+          </div>
+
+          {/* ROW 2: Table No (Left) & 3 Action Icons [Cart, Wishlist, Theme] (Right) */}
+          <div className="flex items-center justify-between pt-1.5 pb-2 border-t border-slate-200/70 dark:border-white/10">
+            {/* Left: Dynamic Table Number Pill */}
+            <button
+              onClick={onOpenTableSelector}
+              data-open-table-modal="true"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/15 dark:bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold active:scale-95 transition-all shadow-xs"
+              title="Click to change table"
+            >
+              <span>{selectedTable ? `Table No - ${selectedTable}` : 'Select Table'}</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+            </button>
+
+            {/* Right: Cart, Wishlist, Theme Icons */}
+            <div className="flex items-center gap-2">
+              {/* 1. Cart Icon */}
+              <button
+                onClick={openCart}
+                className={`relative p-1.5 rounded-full border transition-all active:scale-95 shadow-xs ${
+                  totalCount > 0
+                    ? 'bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep border-amber-400 font-extrabold'
+                    : 'bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 border-amber-300/40 dark:border-white/10'
+                }`}
+                aria-label="View Shopping Cart"
+                title="Shopping Cart"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                {totalCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-red-600 text-white font-extrabold text-[8.5px] flex items-center justify-center shadow-xs leading-none">
+                    {totalCount}
+                  </span>
+                )}
+              </button>
+
+              {/* 2. Wishlist Icon */}
+              <button
+                onClick={openWishlist}
+                className="relative p-1.5 rounded-full bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 border border-amber-300/40 dark:border-white/10 transition active:scale-95 shadow-xs"
+                aria-label="Saved Wishlist"
+                title="Saved Wishlist"
+              >
+                <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'fill-red-500 text-red-500' : ''}`} />
+                {wishlist.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-red-500 text-white font-extrabold text-[8.5px] flex items-center justify-center shadow-xs leading-none">
+                    {wishlist.length}
+                  </span>
+                )}
+              </button>
+
+              {/* 3. Theme / Brightness Icon */}
+              <button
+                onClick={toggleTheme}
+                className="p-1.5 rounded-full bg-amber-100 dark:bg-white/10 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-white/20 border border-amber-300/40 dark:border-white/10 transition active:scale-95 shadow-xs"
+                aria-label="Toggle Bright / Dark Mode"
+                title={theme === 'light' ? 'Switch to Dark Theme' : 'Switch to Bright Theme'}
+              >
+                {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ======================================================== */}
+        {/* DESKTOP TOP NAVBAR (>= md) - PRESERVED UNCHANGED         */}
+        {/* ======================================================== */}
+        <div className="hidden md:flex items-center justify-between py-3">
           
           {/* Logo Brand */}
           <Link href="/" className="flex items-center gap-3 group">
@@ -157,75 +251,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
           </div>
-
-          {/* Mobile Right Controls */}
-          <div className="flex md:hidden items-center gap-2">
-            
-            {/* Mobile Cart Button */}
-            <button
-              onClick={openCart}
-              className={`relative p-1.5 rounded-full border transition-all ${
-                totalCount > 0
-                  ? 'bg-namaha-gold text-namaha-green-deep border-amber-400 font-bold'
-                  : 'bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 border-amber-300/40 dark:border-white/10'
-              }`}
-              aria-label="View Cart"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              {totalCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 text-white font-bold text-[8px] flex items-center justify-center">
-                  {totalCount}
-                </span>
-              )}
-            </button>
-
-            {/* Wishlist Mobile */}
-            <button
-              onClick={openWishlist}
-              className="relative p-1.5 rounded-full bg-amber-50 dark:bg-white/10 text-amber-800 dark:text-amber-300 border border-amber-300/40 dark:border-white/10"
-              aria-label="Saved Wishlist"
-            >
-              <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'fill-red-500 text-red-500' : ''}`} />
-              {wishlist.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white font-bold text-[8px] flex items-center justify-center">
-                  {wishlist.length}
-                </span>
-              )}
-            </button>
-
-            {/* Theme Switcher Mobile */}
-            <button
-              onClick={toggleTheme}
-              className="p-1.5 rounded-full bg-amber-100 dark:bg-white/10 text-amber-800 dark:text-amber-300 border border-amber-300/40 dark:border-white/10"
-              aria-label="Toggle Theme"
-            >
-              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </button>
-
-            {/* Table Badge Mobile */}
-            <button
-              onClick={onOpenTableSelector}
-              data-open-table-modal="true"
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold"
-            >
-              <Utensils className="w-3.5 h-3.5" />
-              <span>{selectedTable ? `T-${selectedTable}` : 'Table?'}</span>
-            </button>
-
-            {/* Mobile Hamburger Toggle */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg bg-namaha-green-deep/5 dark:bg-white/10 text-namaha-green-deep dark:text-white hover:bg-namaha-green-deep/10 dark:hover:bg-white/20 transition"
-              aria-label="Toggle Navigation"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <MenuIcon className="w-6 h-6" />}
-            </button>
-          </div>
         </div>
 
         {/* Mobile Dropdown Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 p-4 bg-white/98 dark:bg-namaha-green-dark/98 border border-namaha-gold/30 rounded-2xl shadow-2xl backdrop-blur-xl animate-fade-in flex flex-col gap-3">
+          <div className="md:hidden mt-2 mb-3 p-4 bg-white/98 dark:bg-namaha-green-dark/98 border border-namaha-gold/30 rounded-2xl shadow-2xl backdrop-blur-xl animate-fade-in flex flex-col gap-3">
             {onOpenSearch && (
               <button
                 onClick={() => {
@@ -304,3 +334,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

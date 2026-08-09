@@ -177,12 +177,14 @@ function HomeContent() {
         onSelectTable={handleTableSelected}
       />
 
-      {/* 3. Hero Banner */}
-      <HeroBanner
-        info={restaurantInfo}
-        selectedTable={selectedTable}
-        onOpenTableSelector={() => setIsTableModalOpen(true)}
-      />
+      {/* 3. Hero Banner (Desktop Only - Mobile flows directly from Top Header into Categories & Menu) */}
+      <div className="hidden md:block">
+        <HeroBanner
+          info={restaurantInfo}
+          selectedTable={selectedTable}
+          onOpenTableSelector={() => setIsTableModalOpen(true)}
+        />
+      </div>
 
       {/* 4. Sticky Category Nav */}
       <CategoryNav
@@ -192,7 +194,7 @@ function HomeContent() {
       />
 
       {/* 5. Main Digital Menu Container */}
-      <main id="menu" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full">
+      <main id="menu" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 sm:py-12 flex-1 w-full">
         
         {/* Search & Filter Bar */}
         <div id="menu-search-bar">

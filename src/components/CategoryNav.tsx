@@ -49,7 +49,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
   }, [enabledCategories.length]);
 
   return (
-    <div className="sticky top-[64px] sm:top-[72px] z-30 bg-white/95 dark:bg-namaha-green-dark/95 backdrop-blur-md border-y border-emerald-950/10 dark:border-namaha-gold/20 py-2.5 shadow-sm transition-all duration-300">
+    <div className="sticky top-[78px] md:top-[68px] z-30 bg-white/95 dark:bg-namaha-green-dark/95 backdrop-blur-md border-y border-emerald-950/10 dark:border-namaha-gold/20 py-2.5 shadow-sm transition-all duration-300">
       <div
         ref={containerRef}
         className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative flex items-start justify-between gap-2"
