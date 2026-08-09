@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "namahaa-menu",
+  "name": "app",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-08-31",
   "compatibility_flags": [
