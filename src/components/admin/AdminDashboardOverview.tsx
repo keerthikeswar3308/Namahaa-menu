@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Category, MenuItem, RestaurantInfo } from '@/types';
-import { Utensils, CheckCircle, AlertTriangle, Star, FolderTree, Power, Sparkles, Plus, FileUp, RefreshCw, Bot } from 'lucide-react';
+import { Utensils, CheckCircle, AlertTriangle, Star, FolderTree, Power, Sparkles, Plus, FileUp, RefreshCw } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 
 interface AdminDashboardOverviewProps {
@@ -123,40 +123,16 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
           <Sparkles className="w-5 h-5" /> Quick Management Shortcuts
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <button
-            onClick={() => onNavigateTab('assistant')}
-            className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-namaha-gold/30 to-amber-600/20 hover:from-amber-500/30 hover:to-namaha-gold/40 border-2 border-namaha-gold/60 text-left transition flex items-center justify-between group shadow-lg"
-          >
-            <div>
-              <span className="text-sm font-bold text-namaha-gold block flex items-center gap-1.5">
-                🤖 AI Menu Assistant
-              </span>
-              <span className="text-xs text-amber-300/90">Chatbot to manage menu, prices & images</span>
-            </div>
-            <Bot className="w-6 h-6 text-namaha-gold group-hover:scale-125 transition-transform" />
-          </button>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <button
             onClick={() => onNavigateTab('menu')}
             className="p-4 rounded-2xl bg-white/5 hover:bg-namaha-gold/20 border border-white/10 hover:border-namaha-gold/50 text-left transition flex items-center justify-between group"
           >
             <div>
               <span className="text-sm font-bold text-white group-hover:text-namaha-gold block">Add / Edit Menu</span>
-              <span className="text-xs text-gray-400">Manage all food dishes</span>
+              <span className="text-xs text-gray-400">Manage 85+ food items</span>
             </div>
             <Plus className="w-5 h-5 text-namaha-gold group-hover:scale-125 transition-transform" />
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('import')}
-            className="p-4 rounded-2xl bg-white/5 hover:bg-namaha-gold/20 border border-white/10 hover:border-namaha-gold/50 text-left transition flex items-center justify-between group"
-          >
-            <div>
-              <span className="text-sm font-bold text-white group-hover:text-namaha-gold block">Import Word Doc</span>
-              <span className="text-xs text-gray-400">Auto-parse docx menu</span>
-            </div>
-            <FileUp className="w-5 h-5 text-namaha-gold group-hover:scale-125 transition-transform" />
           </button>
 
           <button
@@ -168,13 +144,24 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
                 alert(`Sync error: ${err.message}`);
               }
             }}
-            className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 to-amber-600/20 hover:from-amber-500/20 hover:to-amber-600/30 border border-amber-500/40 text-left transition flex items-center justify-between group"
+            className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/30 hover:to-amber-600/40 border border-amber-500/50 text-left transition flex items-center justify-between group"
           >
             <div>
               <span className="text-sm font-bold text-amber-300 block">⚡ Sync All to Supabase</span>
               <span className="text-xs text-amber-400/80">Pesarattu, Dosas, Vada...</span>
             </div>
             <Sparkles className="w-5 h-5 text-amber-300 group-hover:scale-125 transition-transform" />
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('import')}
+            className="p-4 rounded-2xl bg-white/5 hover:bg-namaha-gold/20 border border-white/10 hover:border-namaha-gold/50 text-left transition flex items-center justify-between group"
+          >
+            <div>
+              <span className="text-sm font-bold text-white group-hover:text-namaha-gold block">Import Word Doc</span>
+              <span className="text-xs text-gray-400">Auto-parse docx menu</span>
+            </div>
+            <FileUp className="w-5 h-5 text-namaha-gold group-hover:scale-125 transition-transform" />
           </button>
 
           <button
@@ -194,7 +181,7 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
           >
             <div>
               <span className="text-sm font-bold text-red-300 block">Restore Default Menu</span>
-              <span className="text-xs text-red-400/80">Reload original default items</span>
+              <span className="text-xs text-red-400/80">Reload original 85 items</span>
             </div>
             <RefreshCw className="w-5 h-5 text-red-400 group-hover:rotate-180 transition-transform duration-500" />
           </button>
