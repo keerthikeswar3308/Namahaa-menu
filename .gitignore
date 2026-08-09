@@ -29,8 +29,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# opennext / cloudflare
+.open-next/
+cloudflare-env.d.ts
+
 # OS / Editor files
 .DS_Store
 *.pem
 .vscode/
 .idea/
+
