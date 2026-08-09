@@ -68,10 +68,12 @@ function HomeContent() {
       refreshAllData();
     });
 
-    // 2. Poll every 4 seconds for instant cross-device synchronicity
+    // 2. Periodic sync every 25 seconds (only while page is actively in view)
     const interval = setInterval(() => {
-      refreshAllData();
-    }, 4000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refreshAllData();
+      }
+    }, 25000);
 
     // 3. Sync immediately when user switches tabs or unlocks phone
     const handleVisibilityChange = () => {
