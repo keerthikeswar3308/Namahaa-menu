@@ -9,10 +9,11 @@ import { MenuManagement } from '@/components/admin/MenuManagement';
 import { CategoryManagement } from '@/components/admin/CategoryManagement';
 import { SettingsManagement } from '@/components/admin/SettingsManagement';
 import { GalleryManagement } from '@/components/admin/GalleryManagement';
+import { MenuAssistant } from '@/components/admin/MenuAssistant';
 import { DocxImporter } from '@/components/admin/DocxImporter';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -245,8 +246,9 @@ export default function AdminPage() {
     { id: 'menu', label: 'Menu Items', icon: <Utensils className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4" /> },
     { id: 'import', label: 'Import Word Menu', icon: <FileUp className="w-4 h-4" /> },
-    { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'gallery', label: 'Gallery', icon: <Camera className="w-4 h-4" /> },
+    { id: 'assistant', label: '🤖 Menu Assistant', icon: <Bot className="w-4 h-4 text-namaha-gold" /> },
+    { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
   ];
 
   return (
@@ -374,19 +376,32 @@ export default function AdminPage() {
           />
         )}
 
-        {activeTab === 'settings' && (
-          <SettingsManagement
-            info={restaurantInfo}
-            onSaveInfo={handleSaveInfo}
-          />
-        )}
-
         {activeTab === 'gallery' && (
           <GalleryManagement
             images={galleryImages}
             onSaveImage={handleSaveGalleryImage}
             onDeleteImage={handleDeleteGalleryImage}
             onToggleImage={handleToggleGalleryImage}
+          />
+        )}
+
+        {activeTab === 'assistant' && (
+          <MenuAssistant
+            items={menuItems}
+            categories={categories}
+            info={restaurantInfo}
+            onRefreshData={loadAllData}
+            onSaveItem={handleSaveMenuItem}
+            onDeleteItem={handleDeleteMenuItem}
+            onToggleStatus={handleToggleItemStatus}
+            onSaveCategory={handleSaveCategory}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsManagement
+            info={restaurantInfo}
+            onSaveInfo={handleSaveInfo}
           />
         )}
       </main>
