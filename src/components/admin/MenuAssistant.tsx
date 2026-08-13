@@ -92,7 +92,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     {
       id: 'welcome',
       sender: 'bot',
-      text: "👋 Namaste Admin! I am your AI Menu Assistant. You can manage prices, food images, names, descriptions, categories, and availability simply by chatting with me.",
+      text: "👋 Namaste Admin! I am your AI Menu Assistant. You can manage prices, food images, names, descriptions, categories, availability, and delete dishes simply by chatting with me.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -105,6 +105,12 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
   // Guided Add Item Wizard State
   const [wizardStep, setWizardStep] = useState<number | null>(null);
   const [wizardData, setWizardData] = useState<Partial<MenuItem>>({});
+
+  // Active Interactive Flow (Rename, Description, Price)
+  const [activeFlow, setActiveFlow] = useState<{
+    type: 'rename' | 'description' | 'price';
+    item: MenuItem;
+  } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -222,7 +228,43 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setIsProcessing(true);
 
     try {
-      // Check if inside Guided Add Item Wizard
+      // 1. Check if inside Active Interactive Flow (Rename, Description, Price)
+      if (activeFlow) {
+        if (activeFlow.type === 'rename') {
+          const newName = text.trim();
+          if (newName) {
+            proposeRename(activeFlow.item, newName);
+            setActiveFlow(null);
+            setIsProcessing(false);
+            return;
+          }
+        } else if (activeFlow.type === 'description') {
+          const newDesc = text.trim();
+          if (newDesc) {
+            proposeDescription(activeFlow.item, newDesc);
+            setActiveFlow(null);
+            setIsProcessing(false);
+            return;
+          }
+        } else if (activeFlow.type === 'price') {
+          const num = parseInt(text.replace(/[^0-9]/g, ''), 10);
+          if (!isNaN(num) && num > 0) {
+            proposePriceChange(activeFlow.item, num);
+            setActiveFlow(null);
+            setIsProcessing(false);
+            return;
+          } else {
+            addMessage({
+              sender: 'bot',
+              text: '⚠️ Please enter a valid price number in Rupees (e.g. 50, 75):',
+            });
+            setIsProcessing(false);
+            return;
+          }
+        }
+      }
+
+      // 2. Check if inside Guided Add Item Wizard
       if (wizardStep !== null) {
         handleWizardInput(text, currentFile);
         setIsProcessing(false);
@@ -248,7 +290,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     attachedFile: File | null,
     attachedPreview: string | null
   ) => {
-    const lower = text.toLowerCase();
+    const lower = text.toLowerCase().trim();
 
     // 1. Quick Report / Query: Items without images
     if (
@@ -267,7 +309,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
       } else {
         addMessage({
           sender: 'bot',
-          text: `Found ${noImageItems.length} dishes without images. You can click "Upload Photo" below to attach an image to any item:`,
+          text: `Found ${noImageItems.length} dishes without images. Click "Upload Photo" below to attach an image to any item:`,
           itemList: noImageItems,
         });
       }
@@ -338,29 +380,135 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     }
 
     // 5. General View Menu
-    if (lower === 'view menu' || lower === 'show menu' || lower === 'list menu' || lower === 'all items') {
+    if (lower === 'view menu' || lower === 'show menu' || lower === 'list menu' || lower === 'all items' || lower === 'menu') {
       addMessage({
         sender: 'bot',
-        text: `📋 Total Menu: ${items.length} items across ${categories.length} categories. Here are your dishes:`,
+        text: `📋 Total Menu: ${items.length} items across ${categories.length} categories. Select any dish below to manage:`,
         itemList: items.slice(0, 15),
       });
       return;
     }
 
-    // 6. Start Add Menu Item Wizard
+    // 6. General Add Item
     if (
       lower === 'add menu item' ||
       lower === 'add a menu item' ||
       lower === 'add new item' ||
       lower === 'create item' ||
       lower === 'new item' ||
-      lower === 'add a new menu item'
+      lower === 'add a new menu item' ||
+      lower === 'add item'
     ) {
       startAddItemWizard();
       return;
     }
 
-    // 7. Bulk Price adjustment: "Change all prices of snacks by 5" or "Increase dosa prices by 10"
+    // 7. General Delete Flow trigger
+    if (
+      lower === 'delete' ||
+      lower === 'delete item' ||
+      lower === 'delete a item' ||
+      lower === 'delete an item' ||
+      lower === 'delete menu item' ||
+      lower === 'delete a menu item' ||
+      lower === 'delete dish' ||
+      lower === 'delete a dish' ||
+      lower === 'delete dishes' ||
+      lower === 'remove item' ||
+      lower === 'remove an item' ||
+      lower === 'remove menu item' ||
+      lower === 'remove a menu item' ||
+      lower === 'remove dish' ||
+      lower === 'remove a dish'
+    ) {
+      startDeleteItemFlow();
+      return;
+    }
+
+    // 8. General Rename Flow trigger
+    if (
+      lower === 'rename' ||
+      lower === 'rename item' ||
+      lower === 'rename a item' ||
+      lower === 'rename an item' ||
+      lower === 'rename dish' ||
+      lower === 'rename a dish' ||
+      lower === 'change name' ||
+      lower === 'edit name'
+    ) {
+      startRenameFlow();
+      return;
+    }
+
+    // 9. General Price Flow trigger
+    if (
+      lower === 'change price' ||
+      lower === 'price' ||
+      lower === 'update price' ||
+      lower === 'edit price' ||
+      lower === 'set price' ||
+      lower === 'change prices'
+    ) {
+      startPriceFlow();
+      return;
+    }
+
+    // 10. General Category Flow trigger
+    if (
+      lower === 'change category' ||
+      lower === 'move' ||
+      lower === 'move item' ||
+      lower === 'move dish' ||
+      lower === 'move category' ||
+      lower === 'category' ||
+      lower === 'switch category' ||
+      lower === 'transfer dish' ||
+      lower === 'transfer item'
+    ) {
+      startCategoryFlow();
+      return;
+    }
+
+    // 11. General Description Flow trigger
+    if (
+      lower === 'change description' ||
+      lower === 'edit description' ||
+      lower === 'description' ||
+      lower === 'update description' ||
+      lower === 'set description' ||
+      lower === 'dish description'
+    ) {
+      startDescriptionFlow();
+      return;
+    }
+
+    // 12. General Availability Flow trigger
+    if (
+      lower === 'availability' ||
+      lower === 'toggle availability' ||
+      lower === 'stock' ||
+      lower === 'manage availability' ||
+      lower === 'in stock'
+    ) {
+      startAvailabilityFlow();
+      return;
+    }
+
+    // 13. General Image Flow trigger
+    if (
+      lower === 'image' ||
+      lower === 'photo' ||
+      lower === 'change image' ||
+      lower === 'add image' ||
+      lower === 'upload image' ||
+      lower === 'change photo' ||
+      lower === 'food photos'
+    ) {
+      startImageFlow();
+      return;
+    }
+
+    // 14. Bulk Price adjustment: "Change all prices of snacks by 5" or "Increase dosa prices by 10"
     const bulkMatch = lower.match(/(?:change|increase|decrease|update)\s+all\s+(?:prices\s+of\s+)?([a-z0-9\s]+?)\s+(?:by|to)\s+₹?([0-9]+)/);
     if (bulkMatch) {
       const catName = bulkMatch[1].trim();
@@ -392,42 +540,172 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
       }
     }
 
-    // 8. Delete Item Command: "Delete Vada", "Remove item Pongal"
-    const deleteMatch = lower.match(/(?:delete|remove)\s+(?:item\s+)?([a-z0-9\s]+)/);
-    if (deleteMatch && !lower.includes('image') && !lower.includes('photo')) {
-      const queryName = deleteMatch[1].trim();
-      const matched = findItemByName(queryName);
+    // 15. Specific Rename Item Command:
+    // "Rename Pesarrattu to Special Pesarrattu", "Change name of Vada to Medu Vada", "Change Idly name to Rava Idly"
+    const renameMatch =
+      lower.match(/(?:rename|change\s+(?:the\s+)?name\s+of|set\s+(?:the\s+)?name\s+of)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:to|as)\s+(.+)/i) ||
+      lower.match(/(?:change|set|update)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+name\s+(?:to|as)\s+(.+)/i);
+
+    if (renameMatch) {
+      const oldNameQuery = renameMatch[1].trim();
+      const newName = text.substring(text.toLowerCase().indexOf(renameMatch[2].toLowerCase())).trim();
+
+      if (oldNameQuery && newName) {
+        const matched = findItemByName(oldNameQuery);
+        if (matched.length === 1) {
+          proposeRename(matched[0], newName);
+          return;
+        } else if (matched.length > 1) {
+          askDisambiguation(`Which dish would you like to rename to "${newName}"?`, matched, (chosenItem) => {
+            proposeRename(chosenItem, newName);
+          });
+          return;
+        }
+      }
+    }
+
+    // 16. Specific Category Change Command:
+    // "Move Vada to Snacks", "Change category of Poori to Breakfast", "Put Idly in Snacks", "Change Idly category to Snacks"
+    const moveCatMatch =
+      lower.match(/(?:move|change\s+category\s+of|transfer|put|set\s+category\s+of)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:to|into|under|in)\s+(?:the\s+)?(?:category\s+)?(.+)/i) ||
+      lower.match(/(?:change|set|update)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+category\s+(?:to|as|into)\s+(.+)/i);
+
+    if (moveCatMatch) {
+      const dishQuery = moveCatMatch[1].trim();
+      const targetCatQuery = moveCatMatch[2].replace(/(?:category|dishes)$/i, '').trim();
+      const targetCat = findCategoryByName(targetCatQuery);
+
+      if (targetCat && dishQuery) {
+        const matched = findItemByName(dishQuery);
+        if (matched.length === 1) {
+          proposeCategoryChange(matched[0], targetCat);
+          return;
+        } else if (matched.length > 1) {
+          askDisambiguation(`Which dish would you like to move to "${targetCat.name}"?`, matched, (chosenItem) => {
+            proposeCategoryChange(chosenItem, targetCat);
+          });
+          return;
+        }
+      }
+    }
+
+    // 17. Specific Description Edit Command:
+    // "Change description of Vada to Crispy golden fried lentil fritters", "Set Idly description to Steamed cakes"
+    const descMatch =
+      lower.match(/(?:change|set|update|edit)\s+(?:the\s+)?description\s+of\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+to\s+(.+)/i) ||
+      lower.match(/(?:change|set|update|edit)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+description\s+to\s+(.+)/i);
+
+    if (descMatch) {
+      const dishQuery = descMatch[1].trim();
+      const newDesc = text.substring(text.toLowerCase().indexOf(descMatch[2].toLowerCase())).trim();
+      const matched = findItemByName(dishQuery);
       if (matched.length === 1) {
-        const item = matched[0];
-        addMessage({
-          sender: 'bot',
-          text: `⚠️ Are you sure you want to permanently delete "${item.name}" from Supabase?`,
-          proposal: {
-            type: 'delete_item',
-            itemId: item.id,
-            itemName: item.name,
-            item,
-          },
-        });
+        proposeDescription(matched[0], newDesc);
         return;
       } else if (matched.length > 1) {
-        askDisambiguation('Which item would you like to delete?', matched, (selectedItem) => {
-          addMessage({
-            sender: 'bot',
-            text: `⚠️ Are you sure you want to permanently delete "${selectedItem.name}"?`,
-            proposal: {
-              type: 'delete_item',
-              itemId: selectedItem.id,
-              itemName: selectedItem.name,
-              item: selectedItem,
-            },
-          });
+        askDisambiguation(`Which dish's description would you like to update?`, matched, (chosenItem) => {
+          proposeDescription(chosenItem, newDesc);
         });
         return;
       }
     }
 
-    // 9. Image Upload / Change: "Add an image to Pesarrattu", "Change image of Masala Dosa", "Put this photo for Vada"
+    // 18. Specific Price change command:
+    // "Change price of Idly to 50", "Make idly 50 rupees", "Idly price 50", "Set Idly to 60"
+    const priceMatch =
+      lower.match(/(?:change|set|update|make)\s+(?:the\s+)?price\s+of\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:to|is|as)?\s*₹?\s*([0-9]+)/i) ||
+      lower.match(/(?:change|set|update|make)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:price\s+to|price\s+is|to|is|price)\s*₹?\s*([0-9]+)/i) ||
+      lower.match(/^(?:the\s+)?(?:item\s+|dish\s+)?([a-z0-9\s]+?)\s+(?:price\s+to|price\s+is|price\s+is\s+now|price)\s*₹?\s*([0-9]+)/i);
+
+    if (priceMatch && !lower.includes('time') && !lower.includes('prep')) {
+      const dishName = priceMatch[1]
+        .replace(/^(?:make|set|change|update|the|price\s+of)/g, '')
+        .trim();
+      const newPrice = parseInt(priceMatch[2], 10);
+
+      if (dishName && !isNaN(newPrice) && newPrice > 0) {
+        const matched = findItemByName(dishName);
+        if (matched.length === 1) {
+          proposePriceChange(matched[0], newPrice);
+          return;
+        } else if (matched.length > 1) {
+          askDisambiguation(`Which item should be updated to ₹${newPrice}?`, matched, (chosenItem) => {
+            proposePriceChange(chosenItem, newPrice);
+          });
+          return;
+        }
+      }
+    }
+
+    // 19. Specific Availability Toggle:
+    // "Make Pongal unavailable", "Make Dosa available", "Vada is out of stock", "Mark Idly as in stock"
+    const availMatch =
+      lower.match(/(?:make|mark|set)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:as\s+)?(available|unavailable|out\s+of\s+stock|in\s+stock|active|inactive)/i) ||
+      lower.match(/(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+is\s+(available|unavailable|out\s+of\s+stock|in\s+stock|active|inactive)/i) ||
+      lower.match(/^(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(out\s+of\s+stock|in\s+stock)$/i);
+
+    if (availMatch) {
+      const dishQuery = availMatch[1].trim();
+      const statusWord = availMatch[2].toLowerCase();
+      const isMakingAvailable = statusWord === 'available' || statusWord === 'in stock' || statusWord === 'active';
+
+      if (dishQuery) {
+        const matched = findItemByName(dishQuery);
+        if (matched.length === 1) {
+          proposeAvailabilityChange(matched[0], isMakingAvailable);
+          return;
+        } else if (matched.length > 1) {
+          askDisambiguation(`Which item should be marked ${isMakingAvailable ? 'Available' : 'Unavailable'}?`, matched, (chosenItem) => {
+            proposeAvailabilityChange(chosenItem, isMakingAvailable);
+          });
+          return;
+        }
+      }
+    }
+
+    // 20. Specific Delete Item Command: "Delete Vada", "Remove item Pongal from menu"
+    const deleteMatch = lower.match(
+      /(?:delete|remove|erase|drop)\s+(?:the\s+)?(?:item\s+|dish\s+|food\s+|menu\s+item\s+)?(.+?)(?:\s+from\s+(?:the\s+)?menu|\s+from\s+supabase|$)/i
+    );
+    if (
+      deleteMatch &&
+      !lower.includes('image') &&
+      !lower.includes('photo') &&
+      !lower.includes('picture') &&
+      !lower.includes('description') &&
+      !lower.includes('category')
+    ) {
+      const queryName = deleteMatch[1]
+        .replace(/^(?:item|dish|food|menu\s+item|the)\s+/i, '')
+        .replace(/\s+(?:from\s+(?:the\s+)?menu|\s+from\s+supabase)$/i, '')
+        .trim();
+
+      if (queryName && queryName !== 'item' && queryName !== 'dish' && queryName !== 'menu' && queryName !== 'items') {
+        const matched = findItemByName(queryName);
+        if (matched.length === 1) {
+          proposeItemDeletion(matched[0]);
+          return;
+        } else if (matched.length > 1) {
+          askDisambiguation('Which item would you like to delete?', matched, (selectedItem) => {
+            proposeItemDeletion(selectedItem);
+          });
+          return;
+        } else {
+          addMessage({
+            sender: 'bot',
+            text: `🔍 I couldn't find any dish named "${queryName}". Select a dish below to delete or choose a category:`,
+            itemList: items.slice(0, 10),
+            options: categories.map((cat) => ({
+              label: `📂 ${cat.name}`,
+              action: () => startDeleteItemFlow(cat),
+            })),
+          });
+          return;
+        }
+      }
+    }
+
+    // 21. Specific Image Upload / Change: "Add an image to Pesarrattu", "Change image of Masala Dosa"
     const isImageCommand =
       lower.includes('image') ||
       lower.includes('photo') ||
@@ -437,7 +715,6 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     if (isImageCommand) {
       // Case A: Image file is attached in this message
       if (attachedFile) {
-        // Extract potential dish name from text if provided
         const potentialName = lower
           .replace(/(?:add|change|upload|put|attach|set)\s+(?:this\s+)?(?:image|photo|picture)\s+(?:to|for|of|on)?/g, '')
           .trim();
@@ -448,7 +725,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
             proposeImageChange(matched[0], attachedFile);
             return;
           } else if (matched.length > 1) {
-            askDisambiguation('I found multiple matching dishes. Which dish should receive this image?', matched, (chosenItem) => {
+            askDisambiguation('Which dish should receive this image?', matched, (chosenItem) => {
               proposeImageChange(chosenItem, attachedFile);
             });
             return;
@@ -523,191 +800,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
       }
     }
 
-    // 10. Price change command: "Change price of Idly to 50", "Make idly 50 rupees", "Idly price 50"
-    const priceMatch = lower.match(/(?:change|make|set|update)?\s*(?:the\s+)?(?:price\s+of\s+)?([a-z0-9\s]+?)\s*(?:price\s+to|to|price\s+is|is|for)?\s*₹?\s*([0-9]+)\s*(?:rupees|rs|inr)?$/i);
-    if (priceMatch && !lower.includes('time') && !lower.includes('prep')) {
-      const dishName = priceMatch[1]
-        .replace(/^(?:make|set|change|update|the|price\s+of)/g, '')
-        .trim();
-      const newPrice = parseInt(priceMatch[2], 10);
-
-      if (dishName && !isNaN(newPrice)) {
-        const matched = findItemByName(dishName);
-        if (matched.length === 1) {
-          const item = matched[0];
-          addMessage({
-            sender: 'bot',
-            text: `Please confirm the price update for "${item.name}":`,
-            proposal: {
-              type: 'change_price',
-              itemId: item.id,
-              itemName: item.name,
-              item,
-              oldValue: item.price,
-              newValue: newPrice,
-            },
-          });
-          return;
-        } else if (matched.length > 1) {
-          askDisambiguation(`Which item should be updated to ₹${newPrice}?`, matched, (chosenItem) => {
-            addMessage({
-              sender: 'bot',
-              text: `Please confirm the price update for "${chosenItem.name}":`,
-              proposal: {
-                type: 'change_price',
-                itemId: chosenItem.id,
-                itemName: chosenItem.name,
-                item: chosenItem,
-                oldValue: chosenItem.price,
-                newValue: newPrice,
-              },
-            });
-          });
-          return;
-        }
-      }
-    }
-
-    // 11. Rename Item: "Rename Pesarrattu to Special Pesarrattu", "Change name of Vada to Medu Vada"
-    const renameMatch = lower.match(/(?:rename|change\s+name\s+of)\s+([a-z0-9\s]+?)\s+to\s+([a-z0-9\s]+)/i);
-    if (renameMatch) {
-      const oldNameQuery = renameMatch[1].trim();
-      const newName = text.substring(text.toLowerCase().indexOf(' to ') + 4).trim();
-
-      const matched = findItemByName(oldNameQuery);
-      if (matched.length === 1) {
-        const item = matched[0];
-        addMessage({
-          sender: 'bot',
-          text: `Please confirm the rename for "${item.name}":`,
-          proposal: {
-            type: 'rename_item',
-            itemId: item.id,
-            itemName: item.name,
-            item,
-            oldValue: item.name,
-            newValue: newName,
-          },
-        });
-        return;
-      } else if (matched.length > 1) {
-        askDisambiguation(`Which item would you like to rename to "${newName}"?`, matched, (chosenItem) => {
-          addMessage({
-            sender: 'bot',
-            text: `Please confirm the rename for "${chosenItem.name}":`,
-            proposal: {
-              type: 'rename_item',
-              itemId: chosenItem.id,
-              itemName: chosenItem.name,
-              item: chosenItem,
-              oldValue: chosenItem.name,
-              newValue: newName,
-            },
-          });
-        });
-        return;
-      }
-    }
-
-    // 12. Availability Toggle: "Make Pongal unavailable", "Make Dosa available", "Vada is out of stock"
-    if (lower.includes('available') || lower.includes('unavailable') || lower.includes('out of stock') || lower.includes('in stock')) {
-      const isMakingAvailable = !lower.includes('unavailable') && !lower.includes('out of stock');
-      const itemQuery = lower
-        .replace(/(?:make|set|is|mark)\s+/g, '')
-        .replace(/(?:available|unavailable|out of stock|in stock|active|inactive)/g, '')
-        .trim();
-
-      if (itemQuery) {
-        const matched = findItemByName(itemQuery);
-        if (matched.length === 1) {
-          const item = matched[0];
-          addMessage({
-            sender: 'bot',
-            text: `Please confirm setting "${item.name}" availability:`,
-            proposal: {
-              type: 'toggle_availability',
-              itemId: item.id,
-              itemName: item.name,
-              item,
-              oldValue: item.isAvailable,
-              newValue: isMakingAvailable,
-            },
-          });
-          return;
-        } else if (matched.length > 1) {
-          askDisambiguation(`Which item should be marked ${isMakingAvailable ? 'Available' : 'Unavailable'}?`, matched, (chosenItem) => {
-            addMessage({
-              sender: 'bot',
-              text: `Please confirm setting "${chosenItem.name}" availability:`,
-              proposal: {
-                type: 'toggle_availability',
-                itemId: chosenItem.id,
-                itemName: chosenItem.name,
-                item: chosenItem,
-                oldValue: chosenItem.isAvailable,
-                newValue: isMakingAvailable,
-              },
-            });
-          });
-          return;
-        }
-      }
-    }
-
-    // 13. Move Category: "Move Vada to Snacks", "Change category of Poori to Breakfast"
-    const moveCatMatch = lower.match(/(?:move|change\s+category\s+of)\s+([a-z0-9\s]+?)\s+to\s+([a-z0-9\s]+)/i);
-    if (moveCatMatch) {
-      const dishQuery = moveCatMatch[1].trim();
-      const targetCatQuery = moveCatMatch[2].trim();
-      const targetCat = findCategoryByName(targetCatQuery);
-
-      if (targetCat) {
-        const matched = findItemByName(dishQuery);
-        if (matched.length === 1) {
-          const item = matched[0];
-          addMessage({
-            sender: 'bot',
-            text: `Please confirm moving "${item.name}" to category "${targetCat.name}":`,
-            proposal: {
-              type: 'change_category',
-              itemId: item.id,
-              itemName: item.name,
-              item,
-              oldValue: item.categoryName,
-              newValue: targetCat.name,
-              targetCategory: targetCat,
-            },
-          });
-          return;
-        }
-      }
-    }
-
-    // 14. Description edit: "Change Vada description to Crispy golden fried lentil fritters"
-    const descMatch = lower.match(/(?:change|set|update)\s+([a-z0-9\s]+?)\s+description\s+to\s+(.+)/i);
-    if (descMatch) {
-      const dishQuery = descMatch[1].trim();
-      const newDesc = text.substring(text.toLowerCase().indexOf(' description to ') + 16).trim();
-      const matched = findItemByName(dishQuery);
-      if (matched.length === 1) {
-        const item = matched[0];
-        addMessage({
-          sender: 'bot',
-          text: `Please confirm the updated description for "${item.name}":`,
-          proposal: {
-            type: 'change_description',
-            itemId: item.id,
-            itemName: item.name,
-            item,
-            oldValue: item.description,
-            newValue: newDesc,
-          },
-        });
-        return;
-      }
-    }
-
-    // 15. Preparation time: "Change preparation time of Poori to 15 minutes"
+    // 22. Preparation time: "Change preparation time of Poori to 15 minutes"
     const prepMatch = lower.match(/(?:change|set|update)\s+(?:prep(?:aration)?\s+time\s+of|prep\s+time\s+for)\s+([a-z0-9\s]+?)\s+to\s+(.+)/i);
     if (prepMatch) {
       const dishQuery = prepMatch[1].trim();
@@ -734,14 +827,378 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     // Fallback: If no intent was recognized
     addMessage({
       sender: 'bot',
-      text: `I couldn't quite understand that command. Here are common actions you can try:`,
+      text: `I couldn't quite understand that command. Here are quick actions you can try:`,
       options: [
-        { label: '💰 Change a Price', action: () => setInputText('Change price of Masala Dosa to ₹70') },
-        { label: '🖼 Change Dish Image', action: () => setInputText('Change image of Idly') },
-        { label: '👁 Check Unavailable Items', action: () => handleSendMessage('Show unavailable items') },
-        { label: '🔍 Find Missing Images', action: () => handleSendMessage('Show items without images') },
+        { label: '✏️ Rename an Item', action: () => startRenameFlow() },
+        { label: '💰 Change a Price', action: () => startPriceFlow() },
+        { label: '📂 Change Category', action: () => startCategoryFlow() },
+        { label: '📝 Edit Description', action: () => startDescriptionFlow() },
+        { label: '👁 Manage Availability', action: () => startAvailabilityFlow() },
+        { label: '🖼 Change Dish Image', action: () => startImageFlow() },
+        { label: '🗑️ Delete a Menu Item', action: () => startDeleteItemFlow(), variant: 'danger' },
         { label: '➕ Add New Menu Item', action: () => startAddItemWizard() },
       ],
+    });
+  };
+
+  // --------------------------------------------------------------------------
+  // INTERACTIVE FLOW HELPERS
+  // --------------------------------------------------------------------------
+
+  // 1. Rename Flow
+  const startRenameFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions = categories.map((cat) => ({
+      label: `📂 ${cat.name}`,
+      action: () => startRenameFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Dishes`,
+        action: () => startRenameFlow(),
+      });
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: catFilter
+        ? `✏️ **Rename Item in ${catFilter.name}:**\nClick "Rename" on any dish below, or type *"Rename <dish> to <new name>"*:`
+        : `✏️ **Rename Menu Item:**\nSelect a dish below or choose a category to rename:`,
+      options: catOptions,
+      itemList: targetItems.slice(0, 12),
+    });
+  };
+
+  const selectItemToRename = (item: MenuItem) => {
+    setActiveFlow({ type: 'rename', item });
+    addMessage({
+      sender: 'bot',
+      text: `✏️ Renaming **"${item.name}"** (Category: ${item.categoryName}, Price: ₹${item.price}).\n\n👉 **Type the new name for this dish in the chat below and press Send:**`,
+    });
+  };
+
+  const proposeRename = (item: MenuItem, newName: string) => {
+    addMessage({
+      sender: 'bot',
+      text: `Please confirm renaming **"${item.name}"** to **"${newName}"**:`,
+      proposal: {
+        type: 'rename_item',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: item.name,
+        newValue: newName,
+      },
+    });
+  };
+
+  // 2. Description Flow
+  const startDescriptionFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions = categories.map((cat) => ({
+      label: `📂 ${cat.name}`,
+      action: () => startDescriptionFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Dishes`,
+        action: () => startDescriptionFlow(),
+      });
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: catFilter
+        ? `📝 **Edit Description in ${catFilter.name}:**\nSelect a dish below to update its description:`
+        : `📝 **Edit Dish Description:**\nSelect which dish you want to update description for:`,
+      options: catOptions,
+      itemList: targetItems.slice(0, 12),
+    });
+  };
+
+  const selectItemToEditDescription = (item: MenuItem) => {
+    setActiveFlow({ type: 'description', item });
+    addMessage({
+      sender: 'bot',
+      text: `📝 Current description for **"${item.name}"**:\n*\"${item.description || 'No description yet'}\"*\n\n👉 **Type the new description in the chat below and press Send:**`,
+    });
+  };
+
+  const proposeDescription = (item: MenuItem, newDesc: string) => {
+    addMessage({
+      sender: 'bot',
+      text: `Please confirm the updated description for **"${item.name}"**:`,
+      proposal: {
+        type: 'change_description',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: item.description,
+        newValue: newDesc,
+      },
+    });
+  };
+
+  // 3. Category Change Flow
+  const startCategoryFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions = categories.map((cat) => ({
+      label: `📂 ${cat.name}`,
+      action: () => startCategoryFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Dishes`,
+        action: () => startCategoryFlow(),
+      });
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: catFilter
+        ? `📂 **Move Dishes in ${catFilter.name}:**\nClick "Move" on any dish below to switch its category:`
+        : `📂 **Change Dish Category:**\nSelect which dish you want to move to another category:`,
+      options: catOptions,
+      itemList: targetItems.slice(0, 12),
+    });
+  };
+
+  const selectItemToChangeCategory = (item: MenuItem) => {
+    const otherCats = categories.filter((c) => c.id !== item.categoryId && c.name.toLowerCase() !== item.categoryName.toLowerCase());
+    addMessage({
+      sender: 'bot',
+      text: `📂 Move **"${item.name}"** (Currently in *${item.categoryName}*) to which category?`,
+      options: otherCats.map((cat) => ({
+        label: `➡️ ${cat.name}`,
+        action: () => proposeCategoryChange(item, cat),
+      })),
+    });
+  };
+
+  const proposeCategoryChange = (item: MenuItem, targetCategory: Category) => {
+    addMessage({
+      sender: 'bot',
+      text: `Please confirm moving **"${item.name}"** from *"${item.categoryName}"* to *"${targetCategory.name}"*:`,
+      proposal: {
+        type: 'change_category',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: item.categoryName,
+        newValue: targetCategory.name,
+        targetCategory,
+      },
+    });
+  };
+
+  // 4. Price Flow
+  const startPriceFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions = categories.map((cat) => ({
+      label: `📂 ${cat.name}`,
+      action: () => startPriceFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Dishes`,
+        action: () => startPriceFlow(),
+      });
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: catFilter
+        ? `💰 **Change Price in ${catFilter.name}:**\nSelect a dish below to update its price:`
+        : `💰 **Update Dish Price:**\nSelect which dish you want to update price for:`,
+      options: catOptions,
+      itemList: targetItems.slice(0, 12),
+    });
+  };
+
+  const selectItemToChangePrice = (item: MenuItem) => {
+    setActiveFlow({ type: 'price', item });
+    addMessage({
+      sender: 'bot',
+      text: `💰 Current price of **"${item.name}"** is **₹${item.price}**.\n\n👉 **Type the new price in the chat below** (or click a quick adjustment):`,
+      options: [
+        { label: `+₹5 (₹${item.price + 5})`, action: () => proposePriceChange(item, item.price + 5) },
+        { label: `+₹10 (₹${item.price + 10})`, action: () => proposePriceChange(item, item.price + 10) },
+        { label: `-₹5 (₹${Math.max(1, item.price - 5)})`, action: () => proposePriceChange(item, Math.max(1, item.price - 5)) },
+      ],
+    });
+  };
+
+  const proposePriceChange = (item: MenuItem, newPrice: number) => {
+    addMessage({
+      sender: 'bot',
+      text: `Please confirm updating price for **"${item.name}"**:`,
+      proposal: {
+        type: 'change_price',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: item.price,
+        newValue: newPrice,
+      },
+    });
+  };
+
+  // 5. Availability Flow
+  const startAvailabilityFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions = categories.map((cat) => ({
+      label: `📂 ${cat.name}`,
+      action: () => startAvailabilityFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Dishes`,
+        action: () => startAvailabilityFlow(),
+      });
+    }
+
+    const disabledCount = items.filter((i) => !i.isAvailable).length;
+
+    addMessage({
+      sender: 'bot',
+      text: catFilter
+        ? `👁 **Item Availability in ${catFilter.name}:**\nClick the toggle status button on any dish below:`
+        : `👁 **Menu Availability Manager:**\nCurrently **${disabledCount} dishes** are marked as Out of Stock.\nClick to toggle availability on any dish:`,
+      options: catOptions,
+      itemList: targetItems.slice(0, 15),
+    });
+  };
+
+  const proposeAvailabilityChange = (item: MenuItem, isAvailable: boolean) => {
+    addMessage({
+      sender: 'bot',
+      text: `Please confirm setting **"${item.name}"** availability:`,
+      proposal: {
+        type: 'toggle_availability',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: item.isAvailable,
+        newValue: isAvailable,
+      },
+    });
+  };
+
+  // 6. Image Flow
+  const startImageFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions = categories.map((cat) => ({
+      label: `📂 ${cat.name}`,
+      action: () => startImageFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Dishes`,
+        action: () => startImageFlow(),
+      });
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: `🖼️ **Food Photo Manager:**\nClick "Upload Photo" or "Change Photo" on any dish below, or attach an image file directly in the chat:`,
+      options: [
+        {
+          label: `📁 Select Image from Device`,
+          action: () => {
+            if (fileInputRef.current) fileInputRef.current.click();
+          },
+          variant: 'primary',
+        },
+        ...catOptions,
+      ],
+      itemList: targetItems.slice(0, 12),
+    });
+  };
+
+  // 7. Delete Flow
+  const startDeleteItemFlow = (catFilter?: Category) => {
+    setActiveFlow(null);
+    const targetItems = catFilter
+      ? items.filter(
+          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+        )
+      : items;
+
+    const catOptions: { label: string; action: () => void; variant?: 'primary' | 'secondary' | 'danger' }[] = categories.map((cat) => ({
+      label: `📂 ${cat.name} (${items.filter((i) => i.categoryId === cat.id || i.categoryName.toLowerCase() === cat.name.toLowerCase()).length})`,
+      action: () => startDeleteItemFlow(cat),
+    }));
+
+    if (catFilter) {
+      catOptions.unshift({
+        label: `🌐 Show All Categories`,
+        action: () => startDeleteItemFlow(),
+      });
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: catFilter
+        ? `🗑️ **Delete Item from ${catFilter.name}:**\nClick "Delete" on any dish below to remove it, or choose another category:`
+        : `🗑️ **Delete Menu Item:**\nSelect a category or click "Delete" on any dish below to permanently remove it from Supabase:`,
+      options: catOptions,
+      itemList: targetItems.slice(0, 12),
+    });
+  };
+
+  const proposeItemDeletion = (item: MenuItem) => {
+    addMessage({
+      sender: 'bot',
+      text: `⚠️ Are you sure you want to permanently delete **"${item.name}"** (₹${item.price}) from the menu in Supabase?`,
+      proposal: {
+        type: 'delete_item',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: `₹${item.price} • ${item.categoryName}`,
+      },
     });
   };
 
@@ -1157,9 +1614,12 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
               <p>&ldquo;Show all dishes in Dosa category&rdquo;</p>
             </div>
             <div className="p-2.5 rounded-xl bg-black/30 border border-white/5 space-y-1">
-              <span className="font-bold text-namaha-gold block">➕ Add New Item</span>
-              <p>&ldquo;Add a new menu item&rdquo;</p>
+              <span className="font-bold text-red-400 flex items-center gap-1">
+                <Trash2 className="w-3.5 h-3.5" /> 🗑️ Delete Dish
+              </span>
               <p>&ldquo;Delete item Vada&rdquo;</p>
+              <p>&ldquo;Remove Pongal from menu&rdquo;</p>
+              <p>&ldquo;Delete menu item&rdquo;</p>
             </div>
           </div>
         </div>
@@ -1181,9 +1641,15 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
-            onClick={() => {
-              if (fileInputRef.current) fileInputRef.current.click();
-            }}
+            onClick={() => startDeleteItemFlow()}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-500/15 hover:bg-red-500 hover:text-white border border-red-500/40 text-red-300 font-bold text-xs transition whitespace-nowrap"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+            <span>🗑️ Delete Item</span>
+          </button>
+
+          <button
+            onClick={() => startImageFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
             <ImageIcon className="w-3.5 h-3.5 text-namaha-gold" />
@@ -1191,7 +1657,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
-            onClick={() => setInputText('Rename ')}
+            onClick={() => startRenameFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
             <Edit3 className="w-3.5 h-3.5 text-namaha-gold" />
@@ -1199,7 +1665,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
-            onClick={() => setInputText('Change price of ')}
+            onClick={() => startPriceFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
             <DollarSign className="w-3.5 h-3.5 text-namaha-gold" />
@@ -1207,7 +1673,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
-            onClick={() => setInputText('Change description of ')}
+            onClick={() => startDescriptionFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
             <Tag className="w-3.5 h-3.5 text-namaha-gold" />
@@ -1215,7 +1681,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
-            onClick={() => setInputText('Move ')}
+            onClick={() => startCategoryFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
             <FolderTree className="w-3.5 h-3.5 text-namaha-gold" />
@@ -1223,7 +1689,7 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
-            onClick={() => handleSendMessage('Show unavailable items')}
+            onClick={() => startAvailabilityFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
             <Eye className="w-3.5 h-3.5 text-namaha-gold" />
@@ -1384,9 +1850,32 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                         )}
 
                         {msg.proposal.type === 'delete_item' && (
-                          <div className="space-y-1 text-red-300">
-                            <p className="font-bold">⚠️ Warning: This action cannot be undone.</p>
-                            <p>Dish &ldquo;{msg.proposal.itemName}&rdquo; will be deleted from Supabase.</p>
+                          <div className="space-y-2 p-2.5 rounded-xl bg-red-950/40 border border-red-500/30 text-red-200">
+                            <div className="flex items-center gap-1.5 text-red-400 font-bold text-xs">
+                              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                              <span>Delete Confirmation Required</span>
+                            </div>
+                            <div className="space-y-1 text-xs text-gray-200 pt-0.5">
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">Dish:</span>
+                                <span className="font-bold text-white">{msg.proposal.itemName}</span>
+                              </div>
+                              {msg.proposal.item && (
+                                <>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-400">Category:</span>
+                                    <span className="text-namaha-gold font-semibold">{msg.proposal.item.categoryName}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-400">Price:</span>
+                                    <span className="text-emerald-400 font-semibold">₹{msg.proposal.item.price}</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-red-300 italic pt-1 border-t border-red-500/20">
+                              ⚠️ This action permanently deletes the dish and its image from Supabase.
+                            </p>
                           </div>
                         )}
 
@@ -1480,7 +1969,11 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                           key={idx}
                           onClick={opt.action}
                           disabled={isProcessing}
-                          className="px-3.5 py-1.5 rounded-full bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border border-namaha-gold/40 text-namaha-gold font-bold text-xs transition-all shadow-xs flex items-center gap-1"
+                          className={`px-3.5 py-1.5 rounded-full border font-bold text-xs transition-all shadow-xs flex items-center gap-1 ${
+                            opt.variant === 'danger'
+                              ? 'bg-red-500/15 hover:bg-red-500 hover:text-white border-red-500/40 text-red-300'
+                              : 'bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border-namaha-gold/40 text-namaha-gold'
+                          }`}
                         >
                           <span>{opt.label}</span>
                           <ChevronRight className="w-3 h-3 opacity-70" />
@@ -1491,61 +1984,126 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
 
                   {/* Item List Display Widget */}
                   {msg.itemList && msg.itemList.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-64 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 gap-2 pt-1 max-h-72 overflow-y-auto pr-1">
                       {msg.itemList.map((item) => (
                         <div
                           key={item.id}
-                          className="p-3 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-between gap-2 text-xs"
+                          className="p-3 rounded-2xl bg-black/50 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-sm"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             {item.image ? (
-                              <div className="relative w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 border border-white/10">
+                              <div className="relative w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 border border-white/10">
                                 <Image src={item.image} alt={item.name} fill className="object-cover" unoptimized />
                               </div>
                             ) : (
-                              <div className="w-9 h-9 rounded-lg bg-white/5 border border-dashed border-amber-400/40 flex items-center justify-center text-amber-400 text-[10px] font-bold flex-shrink-0">
+                              <div className="w-11 h-11 rounded-xl bg-white/5 border border-dashed border-amber-400/40 flex items-center justify-center text-amber-400 text-[10px] font-bold flex-shrink-0">
                                 No Pic
                               </div>
                             )}
                             <div className="min-w-0">
-                              <span className="font-bold text-white truncate block">{item.name}</span>
-                              <span className="text-namaha-gold font-semibold">₹{item.price} • {item.categoryName}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white truncate block text-sm">{item.name}</span>
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${
+                                    item.isAvailable
+                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                      : 'bg-red-500/20 text-red-300 border-red-500/30'
+                                  }`}
+                                >
+                                  {item.isAvailable ? '🟢 Available' : '🔴 Out of Stock'}
+                                </span>
+                              </div>
+                              <div className="text-gray-300 text-xs mt-0.5">
+                                <span className="text-namaha-gold font-extrabold text-sm">₹{item.price}</span>
+                                <span className="text-gray-400 mx-1.5">•</span>
+                                <span className="text-gray-300 font-medium">{item.categoryName}</span>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            {!item.image && (
-                              <button
-                                onClick={() => {
-                                  if (fileInputRef.current) {
-                                    fileInputRef.current.onchange = (e: any) => {
-                                      const f = e.target.files?.[0];
-                                      if (f) proposeImageChange(item, f);
-                                    };
-                                    fileInputRef.current.click();
-                                  }
-                                }}
-                                className="px-2 py-1 rounded-lg bg-namaha-gold/20 hover:bg-namaha-gold hover:text-namaha-green-deep border border-namaha-gold/40 text-namaha-gold font-bold text-[10px] transition"
-                              >
-                                Upload Photo
-                              </button>
-                            )}
+                          {/* Quick Interactive Dish Actions */}
+                          <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0 self-end sm:self-center">
+                            {/* Image Upload/Change */}
+                            <button
+                              onClick={() => {
+                                if (fileInputRef.current) {
+                                  fileInputRef.current.onchange = (e: any) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) proposeImageChange(item, f);
+                                  };
+                                  fileInputRef.current.click();
+                                }
+                              }}
+                              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-gray-200 font-semibold text-[11px] transition flex items-center gap-1"
+                              title="Upload or Change Photo"
+                            >
+                              <ImageIcon className="w-3 h-3 text-namaha-gold" />
+                              <span>{item.image ? 'Photo' : 'Add Pic'}</span>
+                            </button>
 
-                            {!item.isAvailable && (
-                              <button
-                                onClick={() => {
-                                  handleConfirmAction(msg.id, {
-                                    type: 'toggle_availability',
-                                    itemId: item.id,
-                                    itemName: item.name,
-                                    newValue: true,
-                                  });
-                                }}
-                                className="px-2 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 hover:text-white border border-emerald-500/40 text-emerald-400 font-bold text-[10px] transition"
-                              >
-                                Make Available
-                              </button>
-                            )}
+                            {/* Availability Toggle */}
+                            <button
+                              onClick={() => proposeAvailabilityChange(item, !item.isAvailable)}
+                              className={`px-2 py-1 rounded-lg border font-semibold text-[11px] transition flex items-center gap-1 ${
+                                item.isAvailable
+                                  ? 'bg-amber-500/15 hover:bg-amber-500 hover:text-white border-amber-500/30 text-amber-300'
+                                  : 'bg-emerald-500/15 hover:bg-emerald-500 hover:text-white border-emerald-500/30 text-emerald-300'
+                              }`}
+                              title={item.isAvailable ? 'Mark Out of Stock' : 'Mark Available'}
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>{item.isAvailable ? 'Turn Off' : 'Turn On'}</span>
+                            </button>
+
+                            {/* Rename Item */}
+                            <button
+                              onClick={() => selectItemToRename(item)}
+                              className="px-2 py-1 rounded-lg bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border border-namaha-gold/30 text-namaha-gold font-bold text-[11px] transition flex items-center gap-1"
+                              title="Rename Dish"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Rename</span>
+                            </button>
+
+                            {/* Change Price */}
+                            <button
+                              onClick={() => selectItemToChangePrice(item)}
+                              className="px-2 py-1 rounded-lg bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border border-namaha-gold/30 text-namaha-gold font-bold text-[11px] transition flex items-center gap-1"
+                              title="Change Price"
+                            >
+                              <DollarSign className="w-3 h-3" />
+                              <span>Price</span>
+                            </button>
+
+                            {/* Change Category */}
+                            <button
+                              onClick={() => selectItemToChangeCategory(item)}
+                              className="px-2 py-1 rounded-lg bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border border-namaha-gold/30 text-namaha-gold font-bold text-[11px] transition flex items-center gap-1"
+                              title="Move to another category"
+                            >
+                              <FolderTree className="w-3 h-3" />
+                              <span>Move</span>
+                            </button>
+
+                            {/* Edit Description */}
+                            <button
+                              onClick={() => selectItemToEditDescription(item)}
+                              className="px-2 py-1 rounded-lg bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border border-namaha-gold/30 text-namaha-gold font-bold text-[11px] transition flex items-center gap-1"
+                              title="Edit Description"
+                            >
+                              <Tag className="w-3 h-3" />
+                              <span>Desc</span>
+                            </button>
+
+                            {/* Delete Item */}
+                            <button
+                              onClick={() => proposeItemDeletion(item)}
+                              className="px-2 py-1 rounded-lg bg-red-500/20 hover:bg-red-500 hover:text-white border border-red-500/40 text-red-300 font-bold text-[11px] transition flex items-center gap-1"
+                              title={`Delete ${item.name}`}
+                            >
+                              <Trash2 className="w-3 h-3 text-red-400 group-hover:text-white" />
+                              <span>Delete</span>
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -1584,6 +2142,28 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
 
         {/* Input Bar Section */}
         <div className="p-4 bg-black/40 border-t border-white/10">
+          {/* Active Interactive Flow Banner (Rename, Price, Description) */}
+          {activeFlow && (
+            <div className="mb-3 flex items-center justify-between p-2.5 px-3.5 rounded-2xl bg-namaha-gold/15 border border-namaha-gold/40 text-white animate-fade-in shadow-md">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="px-2 py-0.5 rounded-md bg-namaha-gold text-namaha-green-deep font-extrabold text-[10px] uppercase tracking-wider">
+                  {activeFlow.type === 'rename' ? '✏️ Rename Mode' : activeFlow.type === 'price' ? '💰 Price Mode' : '📝 Description Mode'}
+                </span>
+                <span className="text-gray-200">
+                  Editing <strong>&ldquo;{activeFlow.item.name}&rdquo;</strong> — type the new {activeFlow.type === 'rename' ? 'name' : activeFlow.type === 'price' ? 'price in ₹' : 'description'} below and press <strong>Send</strong>:
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveFlow(null)}
+                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition text-xs font-semibold flex items-center gap-1 flex-shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancel</span>
+              </button>
+            </div>
+          )}
+
           {/* Selected image preview chip before sending */}
           {selectedFilePreview && (
             <div className="mb-3 flex items-center justify-between p-2.5 rounded-2xl bg-namaha-green-deep border border-namaha-gold/40 max-w-sm animate-fade-in shadow-md">
@@ -1645,7 +2225,15 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Tell Menu Assistant what to do (e.g. 'Change Idly price to 50' or 'Add image to Dosa')..."
+              placeholder={
+                activeFlow
+                  ? activeFlow.type === 'rename'
+                    ? `Type new name for "${activeFlow.item.name}"...`
+                    : activeFlow.type === 'price'
+                    ? `Type new price for "${activeFlow.item.name}" (e.g. 50)...`
+                    : `Type new description for "${activeFlow.item.name}"...`
+                  : "Tell Menu Assistant what to do (e.g. 'Rename Idly to Ghee Idly', 'Change price of Dosa to 70')..."
+              }
               className="flex-1 py-3 px-4 rounded-2xl bg-white/10 border border-white/15 text-white placeholder-gray-400 text-sm focus:outline-none focus:border-namaha-gold transition"
               disabled={isProcessing}
             />

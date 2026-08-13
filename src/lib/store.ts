@@ -43,9 +43,11 @@ function getAdminAuthHeaders(): Record<string, string> {
     'Content-Type': 'application/json',
   };
   if (typeof window !== 'undefined') {
-    const passcode = localStorage.getItem('namahaa_admin_auth_code') || 'namahaa2026';
-    headers['x-admin-passcode'] = passcode;
-    headers['x-admin-auth'] = passcode;
+    const passcode = localStorage.getItem('namahaa_admin_auth_code');
+    if (passcode) {
+      headers['x-admin-passcode'] = passcode;
+      headers['x-admin-auth'] = passcode;
+    }
     const token = sessionStorage.getItem('namahaa_admin_token');
     if (token) {
       headers['x-admin-token'] = token;

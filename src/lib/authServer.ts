@@ -1,25 +1,42 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 
-// Server-only admin passcode configuration
-const SERVER_ADMIN_PASSCODE = process.env.ADMIN_PASSCODE || 'namahaa2026';
-const VALID_PASSCODES = [SERVER_ADMIN_PASSCODE, 'namahaa2026', 'admin', 'namahaa']
-  .filter(Boolean)
-  .map((p) => p.trim());
+// Server-only admin passcode configuration loaded from environment variables
+function getValidPasscodes(): string[] {
+  const envPasscode = process.env.ADMIN_PASSCODE || 'namahaa2026';
+  return envPasscode
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
 
 // Server secret key used for HMAC session token signing
 const SERVER_SECRET =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.ADMIN_SESSION_SECRET ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'namahaa-secure-server-secret-key-2026-auth';
 
 /**
- * Validates whether a provided passcode matches the admin passcode.
+ * Validates whether a provided passcode matches the configured admin passcode.
+ * Uses timing-safe string comparison to prevent timing attacks.
  */
 export function verifyAdminPasscode(passcode: string): boolean {
   if (!passcode || typeof passcode !== 'string') return false;
   const trimmed = passcode.trim();
-  return VALID_PASSCODES.includes(trimmed);
+  if (!trimmed) return false;
+
+  const validPasscodes = getValidPasscodes();
+  const inputBuffer = Buffer.from(trimmed);
+
+  return validPasscodes.some((valid) => {
+    const validBuffer = Buffer.from(valid);
+    if (inputBuffer.length !== validBuffer.length) return false;
+    try {
+      return crypto.timingSafeEqual(inputBuffer, validBuffer);
+    } catch {
+      return trimmed === valid;
+    }
+  });
 }
 
 /**

@@ -42,16 +42,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
       }
     } catch (err: any) {
       console.error('Admin login error:', err);
-      // Fallback local check if offline
-      if (passcode.trim() === 'namahaa2026' || passcode.trim() === 'admin' || passcode.trim() === 'namahaa') {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('namahaa_admin_auth_code', passcode.trim());
-        }
-        NamahaStore.setAdminLoggedIn(true);
-        onSuccess();
-      } else {
-        setError('Network error while authenticating. Please check your connection.');
-      }
+      setError('Network error while authenticating. Please check your connection.');
     } finally {
       setLoading(false);
     }
