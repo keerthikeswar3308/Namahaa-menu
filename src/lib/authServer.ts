@@ -1,21 +1,49 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 
-// Server-only admin credential configuration loaded from environment variables
+// Server-only admin credential configuration
+let dynamicAdminUsername: string | null = null;
+let dynamicAdminPasscode: string | null = null;
+
+export function setDynamicAdminCredentials(username: string, passcode: string) {
+  if (username && typeof username === 'string') {
+    dynamicAdminUsername = username.trim().toLowerCase();
+  }
+  if (passcode && typeof passcode === 'string') {
+    dynamicAdminPasscode = passcode.trim();
+  }
+}
+
 function getValidUsernames(): string[] {
+  const list: string[] = [];
+  if (dynamicAdminUsername) {
+    list.push(dynamicAdminUsername);
+  }
   const envUsernames = process.env.ADMIN_USERNAME || 'admin,namahaa';
-  return envUsernames
+  envUsernames
     .split(',')
     .map((u) => u.trim().toLowerCase())
-    .filter(Boolean);
+    .filter(Boolean)
+    .forEach((u) => {
+      if (!list.includes(u)) list.push(u);
+    });
+  return list;
 }
 
 function getValidPasscodes(): string[] {
+  const list: string[] = [];
+  if (dynamicAdminPasscode) {
+    list.push(dynamicAdminPasscode);
+  }
   const envPasscode = process.env.ADMIN_PASSCODE || 'namahaa2026';
-  return envPasscode
+  envPasscode
     .split(',')
     .map((p) => p.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .forEach((p) => {
+      if (!list.includes(p)) list.push(p);
+    });
+  return list;
 }
 
 // Server secret key used for HMAC session token signing

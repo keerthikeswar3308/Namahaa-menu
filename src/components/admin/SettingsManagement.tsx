@@ -2,7 +2,22 @@
 
 import React, { useState } from 'react';
 import { RestaurantInfo } from '@/types';
-import { Settings, Save, Sparkles, CheckCircle2, Phone, MapPin, Instagram, Clock, Globe, AlertCircle } from 'lucide-react';
+import {
+  Settings,
+  Save,
+  Sparkles,
+  CheckCircle2,
+  Phone,
+  Clock,
+  AlertCircle,
+  ShieldCheck,
+  User,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Lock,
+  RefreshCw,
+} from 'lucide-react';
 
 interface SettingsManagementProps {
   info: RestaurantInfo;
@@ -14,6 +29,18 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Credentials State
+  const [credCurrentPasscode, setCredCurrentPasscode] = useState('');
+  const [credNewUsername, setCredNewUsername] = useState(
+    typeof window !== 'undefined' ? localStorage.getItem('namahaa_admin_username') || 'admin' : 'admin'
+  );
+  const [credNewPasscode, setCredNewPasscode] = useState('');
+  const [credConfirmPasscode, setCredConfirmPasscode] = useState('');
+  const [showCredPassword, setShowCredPassword] = useState(false);
+  const [credSaving, setCredSaving] = useState(false);
+  const [credSuccess, setCredSuccess] = useState<string | null>(null);
+  const [credError, setCredError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,16 +59,86 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
     }
   };
 
+  const handleUpdateCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCredError(null);
+    setCredSuccess(null);
+
+    if (credNewPasscode !== credConfirmPasscode) {
+      setCredError('New passcodes do not match. Please re-type carefully.');
+      return;
+    }
+
+    if (credNewPasscode.trim().length < 4) {
+      setCredError('New passcode must be at least 4 characters long.');
+      return;
+    }
+
+    if (credNewUsername.trim().length < 3) {
+      setCredError('New username must be at least 3 characters long.');
+      return;
+    }
+
+    setCredSaving(true);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (typeof window !== 'undefined') {
+        const token = sessionStorage.getItem('namahaa_admin_token');
+        if (token) headers['x-admin-token'] = token;
+        const currentPass = localStorage.getItem('namahaa_admin_auth_code') || credCurrentPasscode.trim();
+        headers['x-admin-passcode'] = currentPass;
+      }
+
+      const res = await fetch('/api/admin/change-credentials', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          currentPasscode: credCurrentPasscode.trim(),
+          newUsername: credNewUsername.trim(),
+          newPasscode: credNewPasscode.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('namahaa_admin_username', data.username);
+          localStorage.setItem('namahaa_admin_auth_code', credNewPasscode.trim());
+          if (data.token) {
+            sessionStorage.setItem('namahaa_admin_token', data.token);
+          }
+        }
+        setCredSuccess(`Credentials updated! Username is now "${data.username}".`);
+        setCredCurrentPasscode('');
+        setCredNewPasscode('');
+        setCredConfirmPasscode('');
+        setTimeout(() => setCredSuccess(null), 6000);
+      } else {
+        setCredError(data.error || 'Failed to update admin credentials');
+      }
+    } catch (err: any) {
+      console.error('Credentials update error:', err);
+      setCredError(err.message || 'Network error updating credentials');
+    } finally {
+      setCredSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in text-white max-w-4xl">
+    <div className="space-y-8 animate-fade-in text-white max-w-4xl">
       
+      {/* Top Header */}
       <div className="p-6 rounded-3xl bg-namaha-green-dark border border-namaha-gold/20 shadow-xl flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-serif font-bold text-namaha-gold flex items-center gap-2">
-            <Settings className="w-6 h-6" /> Restaurant Settings & Live Content
+            <Settings className="w-6 h-6" /> Restaurant Settings & Account Security
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            Update restaurant name, branding, phone, address, hours, and announcements stored in Supabase.
+            Update restaurant branding, hours, contact details, and admin security credentials.
           </p>
         </div>
 
@@ -53,6 +150,129 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
         )}
       </div>
 
+      {/* --- ADMIN CREDENTIALS & SECURITY SECTION --- */}
+      <div className="p-6 rounded-3xl bg-gradient-to-br from-namaha-green-dark to-black border-2 border-namaha-gold/40 shadow-2xl space-y-5">
+        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div>
+            <h3 className="text-lg font-serif font-bold text-namaha-gold flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-namaha-gold" /> Admin Username & Password Management
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Change the login username and security passcode used to access this Admin Portal.
+            </p>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+            Security Control
+          </span>
+        </div>
+
+        {credSuccess && (
+          <div className="p-4 rounded-2xl bg-emerald-950/90 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <span>{credSuccess}</span>
+          </div>
+        )}
+
+        {credError && (
+          <div className="p-4 rounded-2xl bg-red-950/90 border border-red-500 text-red-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <span>{credError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleUpdateCredentials} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Current Passcode Verification */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-namaha-gold" />
+                <span>Current Passcode (for verification) *</span>
+              </label>
+              <input
+                type="password"
+                value={credCurrentPasscode}
+                onChange={(e) => setCredCurrentPasscode(e.target.value)}
+                placeholder="Enter current passcode..."
+                required
+                className="w-full px-3.5 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:border-namaha-gold focus:outline-none transition"
+              />
+            </div>
+
+            {/* New Username */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-namaha-gold" />
+                <span>New Admin Username *</span>
+              </label>
+              <input
+                type="text"
+                value={credNewUsername}
+                onChange={(e) => setCredNewUsername(e.target.value)}
+                placeholder="Enter new username (e.g. admin)..."
+                required
+                className="w-full px-3.5 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:border-namaha-gold focus:outline-none transition"
+              />
+            </div>
+
+            {/* New Passcode */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-namaha-gold" />
+                <span>New Security Passcode *</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showCredPassword ? 'text' : 'password'}
+                  value={credNewPasscode}
+                  onChange={(e) => setCredNewPasscode(e.target.value)}
+                  placeholder="Enter new passcode (min 4 chars)..."
+                  required
+                  className="w-full pl-3.5 pr-10 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:border-namaha-gold focus:outline-none transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCredPassword(!showCredPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-namaha-gold"
+                >
+                  {showCredPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm New Passcode */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-namaha-gold" />
+                <span>Confirm New Passcode *</span>
+              </label>
+              <input
+                type={showCredPassword ? 'text' : 'password'}
+                value={credConfirmPasscode}
+                onChange={(e) => setCredConfirmPasscode(e.target.value)}
+                placeholder="Re-type new passcode..."
+                required
+                className="w-full px-3.5 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:border-namaha-gold focus:outline-none transition"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={credSaving}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-namaha-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-namaha-green-deep font-bold text-xs shadow-namaha-gold flex items-center gap-2 disabled:opacity-50 transition"
+            >
+              {credSaving ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="w-4 h-4" />
+              )}
+              <span>{credSaving ? 'Updating Credentials...' : 'Update Admin Username & Passcode'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
       {saveError && (
         <div className="p-4 rounded-2xl bg-red-950 border border-red-500 text-red-300 text-sm font-bold flex items-center gap-2 animate-fade-in">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -60,6 +280,7 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
         </div>
       )}
 
+      {/* --- RESTAURANT INFO FORM --- */}
       <form onSubmit={handleSubmit} className="space-y-6">
         
         {/* Section 1: Basic Identity */}
