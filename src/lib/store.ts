@@ -43,6 +43,10 @@ function getAdminAuthHeaders(): Record<string, string> {
     'Content-Type': 'application/json',
   };
   if (typeof window !== 'undefined') {
+    const username = localStorage.getItem('namahaa_admin_username');
+    if (username) {
+      headers['x-admin-username'] = username;
+    }
     const passcode = localStorage.getItem('namahaa_admin_auth_code');
     if (passcode) {
       headers['x-admin-passcode'] = passcode;
@@ -749,6 +753,8 @@ export class NamahaStore {
       }
     } else {
       localStorage.removeItem(STORAGE_KEYS.ADMIN_AUTH);
+      localStorage.removeItem('namahaa_admin_auth_code');
+      localStorage.removeItem('namahaa_admin_username');
       sessionStorage.removeItem('namahaa_admin_token');
       // Call server logout route to clear HttpOnly cookie
       fetch('/api/admin/auth', { method: 'DELETE' }).catch(() => {});

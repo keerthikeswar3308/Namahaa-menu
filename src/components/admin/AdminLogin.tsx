@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { NamahaLogo } from '../NamahaLogo';
-import { ShieldCheck, ArrowRight, KeyRound, AlertCircle, Eye, EyeOff, Lock } from 'lucide-react';
+import { ShieldCheck, ArrowRight, KeyRound, AlertCircle, Eye, EyeOff, Lock, User } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 
 interface AdminLoginProps {
@@ -10,6 +10,7 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
+  const [username, setUsername] = useState('admin');
   const [passcode, setPasscode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +27,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ passcode: passcode.trim() }),
+        body: JSON.stringify({
+          username: username.trim(),
+          passcode: passcode.trim(),
+        }),
       });
 
       const data = await res.json();
@@ -34,11 +38,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
       if (res.ok && data.success) {
         if (typeof window !== 'undefined') {
           localStorage.setItem('namahaa_admin_auth_code', passcode.trim());
+          localStorage.setItem('namahaa_admin_username', username.trim());
         }
         NamahaStore.setAdminLoggedIn(true, data.token);
         onSuccess();
       } else {
-        setError(data.error || 'Invalid Admin Passcode. Please try again.');
+        setError(data.error || 'Invalid Admin Username or Passcode. Please try again.');
       }
     } catch (err: any) {
       console.error('Admin login error:', err);
@@ -70,15 +75,37 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
         {/* Security Badge */}
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mb-6">
           <ShieldCheck className="w-4 h-4" />
-          <span>Encrypted Passcode Access</span>
+          <span>Encrypted Dual-Credential Access</span>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          {/* Username Field */}
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1.5 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-namaha-gold" />
+              <span>Admin Username</span>
+            </label>
+            
+            <div className="relative">
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username (e.g. admin)..."
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-500 text-sm focus:outline-none focus:border-namaha-gold focus:ring-2 focus:ring-namaha-gold/30 transition"
+                required
+                autoFocus
+                autoComplete="username"
+              />
+            </div>
+          </div>
+
+          {/* Passcode Field */}
           <div>
             <label className="block text-xs font-medium text-gray-300 mb-1.5 flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-namaha-gold" />
-              <span>Enter Security Passcode</span>
+              <span>Security Passcode</span>
             </label>
             
             <div className="relative">
@@ -89,7 +116,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
                 placeholder="Enter passcode..."
                 className="w-full pl-4 pr-11 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-500 text-sm focus:outline-none focus:border-namaha-gold focus:ring-2 focus:ring-namaha-gold/30 transition"
                 required
-                autoFocus
+                autoComplete="current-password"
               />
               
               {/* Show / Hide Password Eye Toggle */}
@@ -108,9 +135,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
               </button>
             </div>
 
-            <p className="text-[11px] text-gray-400 mt-1.5">
-              Default passcode: <code className="text-namaha-gold font-bold">namahaa2026</code>
-            </p>
+            <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
+              <span>Default user: <code className="text-namaha-gold font-semibold">admin</code></span>
+              <span>Passcode: <code className="text-namaha-gold font-semibold">namahaa2026</code></span>
+            </div>
           </div>
 
           {error && (

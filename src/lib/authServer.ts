@@ -1,7 +1,15 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 
-// Server-only admin passcode configuration loaded from environment variables
+// Server-only admin credential configuration loaded from environment variables
+function getValidUsernames(): string[] {
+  const envUsernames = process.env.ADMIN_USERNAME || 'admin,namahaa';
+  return envUsernames
+    .split(',')
+    .map((u) => u.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function getValidPasscodes(): string[] {
   const envPasscode = process.env.ADMIN_PASSCODE || 'namahaa2026';
   return envPasscode
@@ -15,6 +23,28 @@ const SERVER_SECRET =
   process.env.ADMIN_SESSION_SECRET ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'namahaa-secure-server-secret-key-2026-auth';
+
+/**
+ * Validates whether a provided username matches the configured admin username.
+ */
+export function verifyAdminUsername(username: string): boolean {
+  if (!username || typeof username !== 'string') return false;
+  const trimmed = username.trim().toLowerCase();
+  if (!trimmed) return false;
+
+  const validUsernames = getValidUsernames();
+  const inputBuffer = Buffer.from(trimmed);
+
+  return validUsernames.some((valid) => {
+    const validBuffer = Buffer.from(valid);
+    if (inputBuffer.length !== validBuffer.length) return false;
+    try {
+      return crypto.timingSafeEqual(inputBuffer, validBuffer);
+    } catch {
+      return trimmed === valid;
+    }
+  });
+}
 
 /**
  * Validates whether a provided passcode matches the configured admin passcode.
@@ -37,6 +67,13 @@ export function verifyAdminPasscode(passcode: string): boolean {
       return trimmed === valid;
     }
   });
+}
+
+/**
+ * Validates both admin username and passcode.
+ */
+export function verifyAdminCredentials(username: string, passcode: string): boolean {
+  return verifyAdminUsername(username) && verifyAdminPasscode(passcode);
 }
 
 /**

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminSessionToken, verifyAdminPasscode } from '@/lib/authServer';
+import {
+  createAdminSessionToken,
+  verifyAdminCredentials,
+  verifyAdminPasscode,
+  verifyAdminUsername,
+} from '@/lib/authServer';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -7,7 +12,7 @@ export const revalidate = 0;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { passcode } = body as { passcode?: string };
+    const { username, passcode } = body as { username?: string; passcode?: string };
 
     if (!passcode || typeof passcode !== 'string') {
       return NextResponse.json(
@@ -16,11 +21,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!verifyAdminPasscode(passcode)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid admin passcode' },
-        { status: 401 }
-      );
+    // If username is provided, verify both username and passcode
+    if (username && typeof username === 'string') {
+      if (!verifyAdminCredentials(username, passcode)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid admin username or passcode' },
+          { status: 401 }
+        );
+      }
+    } else {
+      // Passcode-only fallback verification
+      if (!verifyAdminPasscode(passcode)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid admin passcode' },
+          { status: 401 }
+        );
+      }
     }
 
     const token = createAdminSessionToken();

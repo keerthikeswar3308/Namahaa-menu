@@ -24,6 +24,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 function getAdminAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   if (typeof window !== 'undefined') {
+    const username = localStorage.getItem('namahaa_admin_username');
+    if (username) {
+      headers['x-admin-username'] = username;
+    }
     const passcode = localStorage.getItem('namahaa_admin_auth_code');
     if (passcode) {
       headers['x-admin-passcode'] = passcode;
