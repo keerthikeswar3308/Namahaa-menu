@@ -256,6 +256,86 @@ export const OrdersManagement: React.FC = () => {
     printWindow.document.close();
   };
 
+  const handlePrintBill = (order: Order) => {
+    if (typeof window === 'undefined') return;
+    const printWindow = window.open('', '_blank', 'width=480,height=650');
+    if (!printWindow) {
+      alert('Pop-up blocker is active. Please enable pop-ups to print customer bills.');
+      return;
+    }
+
+    const itemsHtml = order.items
+      .map(
+        (item) => `
+        <tr>
+          <td style="padding: 4px 0; font-size: 12px;">${item.name}</td>
+          <td style="padding: 4px 0; font-size: 12px; text-align: center;">${item.quantity}</td>
+          <td style="padding: 4px 0; font-size: 12px; text-align: right;">₹${item.price.toFixed(2)}</td>
+          <td style="padding: 4px 0; font-size: 12px; text-align: right; font-weight: bold;">₹${(item.price * item.quantity).toFixed(2)}</td>
+        </tr>
+      `
+      )
+      .join('');
+
+    const formattedDate = new Date(order.createdAt).toLocaleDateString();
+    const formattedTime = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>BILL ${order.orderNumber}</title>
+          <style>
+            body { font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #000; margin: 0; padding: 20px; width: 320px; }
+            .center { text-align: center; }
+            .divider { border-top: 1px solid #000; margin: 10px 0; }
+            .double-divider { border-top: 2px double #000; margin: 10px 0; }
+            .title { font-size: 18px; font-weight: bold; font-family: serif; }
+            table { width: 100%; border-collapse: collapse; }
+            th { text-align: left; font-size: 11px; border-bottom: 1px solid #000; padding-bottom: 4px; }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          <div class="center">
+            <span class="title">NAMAHAA TIFFIN ROOM</span><br/>
+            <span style="font-size: 11px;">Authentic South Indian Tiffins</span><br/>
+            <span style="font-size: 12px; font-weight: bold; margin-top: 4px; display: inline-block;">CUSTOMER INVOICE</span>
+          </div>
+          <div class="divider"></div>
+          <div style="font-size: 11px; line-height: 1.4;">
+            <div style="display: flex; justify-content: space-between;"><span>Order #: <strong>${order.orderNumber}</strong></span> <span>Table #: <strong>${order.tableNumber}</strong></span></div>
+            <div style="display: flex; justify-content: space-between;"><span>Date: ${formattedDate}</span> <span>Time: ${formattedTime}</span></div>
+            ${order.customerName ? `<div>Customer: <strong>${order.customerName}</strong></div>` : ''}
+          </div>
+          <div class="divider"></div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 45%;">ITEM</th>
+                <th style="width: 15%; text-align: center;">QTY</th>
+                <th style="width: 20%; text-align: right;">PRICE</th>
+                <th style="width: 20%; text-align: right;">TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <div class="double-divider"></div>
+          <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: bold;">
+            <span>GRAND TOTAL:</span>
+            <span>₹${order.totalAmount.toFixed(2)}</span>
+          </div>
+          <div class="divider"></div>
+          <div class="center" style="font-size: 11px; font-style: italic; margin-top: 10px;">
+            Thank you for dining with Namahaa Tiffin Room!<br/>Please visit again!
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       if (activeStatusFilter === 'new' && o.orderStatus !== 'pending') return false;
@@ -574,15 +654,27 @@ export const OrdersManagement: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Printing KOT */}
-                <button
-                  onClick={() => handlePrintKot(order)}
-                  className="w-full py-1.5 px-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-namaha-gold border border-amber-500/20 text-xs font-bold transition flex items-center justify-center gap-1.5"
-                  title="Print Kitchen Order Ticket"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>PRINT KOT</span>
-                </button>
+                {/* Printing Actions */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handlePrintKot(order)}
+                    className="py-1.5 px-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-namaha-gold border border-amber-500/20 text-xs font-bold transition flex items-center justify-center gap-1"
+                    title="Print Kitchen Order Ticket"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>PRINT KOT</span>
+                  </button>
+
+                  <button
+                    onClick={() => handlePrintBill(order)}
+                    className="py-1.5 px-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/20 text-xs font-bold transition flex items-center justify-center gap-1"
+                    title="Print Customer Bill Invoice"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>PRINT BILL</span>
+                  </button>
+                </div>
+
 
                 {/* Status Transition Action Buttons */}
                 <div className="flex items-center gap-1.5 pt-1">
