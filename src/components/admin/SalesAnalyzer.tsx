@@ -165,35 +165,36 @@ export const SalesAnalyzer: React.FC = () => {
 
       {/* Custom Date Form */}
       {range === 'custom' && (
-        <form onSubmit={handleApplyCustom} className="p-4 rounded-2xl bg-white dark:bg-namaha-green-deep border border-namaha-gold/20 flex flex-wrap items-center gap-4 text-xs">
+        <form onSubmit={handleApplyCustom} className="p-5 rounded-3xl bg-namaha-green-dark border-2 border-namaha-gold/50 flex flex-wrap items-center gap-4 text-xs shadow-2xl">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-300">Start Date:</span>
+            <span className="font-extrabold text-namaha-gold text-xs uppercase tracking-wider">Start Date:</span>
             <input
               type="date"
               value={customStartDate}
               onChange={(e) => setCustomStartDate(e.target.value)}
-              className="px-3 py-1.5 rounded-xl bg-white dark:bg-namaha-green-dark border border-white/20 text-white font-bold"
+              className="px-4 py-2 rounded-2xl bg-black/60 border border-namaha-gold/40 text-amber-300 font-extrabold text-xs shadow-inner focus:outline-none focus:ring-2 focus:ring-namaha-gold cursor-pointer"
               required
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-300">End Date:</span>
+            <span className="font-extrabold text-namaha-gold text-xs uppercase tracking-wider">End Date:</span>
             <input
               type="date"
               value={customEndDate}
               onChange={(e) => setCustomEndDate(e.target.value)}
-              className="px-3 py-1.5 rounded-xl bg-white dark:bg-namaha-green-dark border border-white/20 text-white font-bold"
+              className="px-4 py-2 rounded-2xl bg-black/60 border border-namaha-gold/40 text-amber-300 font-extrabold text-xs shadow-inner focus:outline-none focus:ring-2 focus:ring-namaha-gold cursor-pointer"
               required
             />
           </div>
           <button
             type="submit"
-            className="px-4 py-1.5 rounded-xl bg-namaha-gold text-namaha-green-deep font-extrabold shadow-md hover:bg-amber-400 transition"
+            className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-namaha-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-namaha-green-deep font-extrabold shadow-namaha-gold transition cursor-pointer"
           >
             APPLY RANGE
           </button>
         </form>
       )}
+
 
       {/* Error state */}
       {error && (

@@ -64,3 +64,17 @@ body {
 .emerald-glow {
   box-shadow: 0 4px 25px rgba(2, 56, 53, 0.12);
 }
+
+/* Custom date picker styling */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.8) sepia(100%) saturate(500%) hue-rotate(5deg);
+  opacity: 0.9;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  transform: scale(1.15);
+  opacity: 1;
+}
+
