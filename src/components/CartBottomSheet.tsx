@@ -18,7 +18,9 @@ import {
   ClipboardList,
   RefreshCw,
   Loader2,
+  Smartphone,
 } from 'lucide-react';
+
 import { getFreshImageUrl } from '@/lib/imageUtils';
 import { NamahaStore } from '@/lib/store';
 import { OrderStore } from '@/lib/orderStore';
@@ -236,7 +238,46 @@ export const CartBottomSheet: React.FC = () => {
       {/* Bottom Sheet Drawer / Modal Container */}
       <div className="relative w-full sm:max-w-lg bg-namaha-green-dark border-t-2 sm:border-2 border-namaha-gold/40 rounded-t-3xl sm:rounded-3xl shadow-2xl text-white max-h-[85vh] sm:max-h-[80vh] flex flex-col overflow-hidden z-10 animate-slide-up sm:animate-scale-up">
         
+        {/* Full Overlay when Order is Submitting / Transmitting */}
+        {isSubmittingOrder && (
+          <div className="absolute inset-0 z-50 bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-5 animate-fade-in">
+            {/* Above Loading: Estimated prep timer & status note */}
+            <div className="space-y-2 max-w-xs">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold text-[11px] font-extrabold tracking-wide uppercase shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-namaha-gold animate-pulse" />
+                <span>Est. Kitchen Prep: ~15–20 Mins</span>
+              </div>
+              <h3 className="text-base font-serif font-bold text-white pt-1">
+                Sending Order to Kitchen...
+              </h3>
+              <p className="text-[11px] text-emerald-300 font-medium leading-relaxed">
+                Transmitting table items directly to kitchen display
+              </p>
+            </div>
+
+            {/* Center Loading Spinner & Utensils Icon */}
+            <div className="relative flex items-center justify-center my-2">
+              <div className="w-20 h-20 rounded-full border-4 border-namaha-gold/20 border-t-namaha-gold animate-spin" />
+              <div className="absolute p-3.5 rounded-full bg-namaha-gold/15 text-namaha-gold">
+                <Utensils className="w-7 h-7 animate-bounce" />
+              </div>
+            </div>
+
+            {/* Below Loading: Keep screen active note */}
+            <div className="p-3 rounded-2xl bg-black/50 border border-amber-500/30 text-amber-300 text-[11px] font-semibold max-w-xs space-y-1 shadow-lg">
+              <div className="flex items-center justify-center gap-1.5 text-amber-400 font-bold text-[11px]">
+                <Smartphone className="w-3.5 h-3.5 animate-pulse" />
+                <span>Please Keep Screen Active</span>
+              </div>
+              <p className="text-[10px] text-gray-300 font-normal leading-normal">
+                Do not turn off your screen or navigate away until order transmission completes.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
+
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0 bg-namaha-green-deep">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-namaha-gold/20 text-namaha-gold">
