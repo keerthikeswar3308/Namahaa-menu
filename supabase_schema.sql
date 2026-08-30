@@ -264,7 +264,15 @@ BEGIN
 END $$;
 
 -- ========================================================
--- 7. ENABLE SUPABASE REALTIME PUBLICATION FOR ORDERS
+-- 7. PERFORMANCE INDEXES FOR HIGH VOLUME ORDERS & ANALYTICS
+-- ========================================================
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders (order_status);
+CREATE INDEX IF NOT EXISTS idx_orders_table_number ON public.orders (table_number);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON public.order_items (order_id);
+
+-- ========================================================
+-- 8. ENABLE SUPABASE REALTIME PUBLICATION FOR ORDERS
 -- Enables instant cross-device WebSocket broadcasts to Admin Live Orders KDS
 -- ========================================================
 DO $$
@@ -276,6 +284,7 @@ BEGIN
 EXCEPTION
     WHEN duplicate_object THEN NULL;
 END $$;
+
 
 
 

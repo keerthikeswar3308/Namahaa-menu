@@ -210,16 +210,22 @@ export const CartBottomSheet: React.FC = () => {
     switch (status) {
       case 'pending':
         return { label: 'Sent to Kitchen', desc: 'Kitchen is confirming your items...', color: 'text-amber-400', step: 1 };
+      case 'accepted':
+        return { label: 'Order Accepted', desc: 'Kitchen accepted your order!', color: 'text-blue-400', step: 2 };
       case 'preparing':
-        return { label: 'Preparing', desc: 'Chef is cooking your tiffins fresh!', color: 'text-blue-400', step: 2 };
+        return { label: 'Preparing', desc: 'Chef is cooking your tiffins fresh!', color: 'text-purple-400', step: 2 };
+      case 'ready':
       case 'served':
-        return { label: 'Ready to Serve', desc: 'Dish is hot and coming to your table!', color: 'text-purple-400', step: 3 };
+        return { label: 'Ready to Serve', desc: 'Dish is hot and coming to your table!', color: 'text-teal-400', step: 3 };
       case 'completed':
         return { label: 'Completed', desc: 'Enjoyed your tiffin? Visit again!', color: 'text-emerald-400', step: 4 };
       case 'cancelled':
         return { label: 'Cancelled', desc: 'This order was cancelled.', color: 'text-rose-400', step: 0 };
+      default:
+        return { label: 'Order Placed', desc: 'Processing order...', color: 'text-amber-400', step: 1 };
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md animate-fade-in">

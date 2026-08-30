@@ -61,7 +61,7 @@ export interface GalleryImage {
 
 export type FilterType = 'all' | 'veg' | 'popular' | 'chef_special' | 'today_special' | 'available';
 
-export type OrderStatus = 'pending' | 'preparing' | 'served' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
 
 export interface OrderItem {
   id: string;
@@ -84,15 +84,80 @@ export interface Order {
   customerPhone?: string;
   notes?: string;
   sessionId?: string;
-  paymentMethod?: string;
-  paymentStatus?: string;
-  paymentReference?: string;
   idempotencyKey?: string;
-  adminPaidBy?: string;
-  adminPaidAt?: string;
   createdAt: string;
   updatedAt?: string;
 }
+
+export interface DailyOrderSummary {
+  date: string; // YYYY-MM-DD
+  formattedDate: string; // e.g. "30 AUG 2026"
+  orderCount: number;
+  itemCount: number;
+  totalOrderValue: number;
+  averageOrderValue: number;
+  activeCount: number;
+  completedCount: number;
+  cancelledCount: number;
+}
+
+export interface TopSellingItem {
+  name: string;
+  quantitySold: number;
+  totalValue: number;
+}
+
+export interface CategorySales {
+  categoryName: string;
+  totalValue: number;
+  quantitySold: number;
+}
+
+export interface HourlySales {
+  hourLabel: string; // e.g. "8-9 AM"
+  hour: number; // 0-23
+  orderCount: number;
+  totalValue: number;
+}
+
+export interface DailySalesTrend {
+  date: string;
+  formattedDate: string;
+  orderCount: number;
+  totalValue: number;
+}
+
+export interface TableSales {
+  tableNumber: number;
+  orderCount: number;
+  totalValue: number;
+}
+
+export interface SalesAnalytics {
+  dateRangeLabel: string;
+  totalOrderValue: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  totalItemsSold: number;
+  prevPeriodOrderValue?: number;
+  prevPeriodOrders?: number;
+  prevPeriodAvgValue?: number;
+  prevPeriodItemsSold?: number;
+  valueChangePercentage?: number;
+  ordersChangePercentage?: number;
+  topSellingItems: TopSellingItem[];
+  categorySales: CategorySales[];
+  hourlySales: HourlySales[];
+  dailyTrend: DailySalesTrend[];
+  tableSales: TableSales[];
+  peakHour?: {
+    label: string;
+    orderCount: number;
+    totalValue: number;
+  };
+  insights: string[];
+}
+
 
 
 

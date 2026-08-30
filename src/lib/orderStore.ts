@@ -1,4 +1,4 @@
-import { Order, OrderItem, OrderStatus } from '@/types';
+import { Order, OrderItem, OrderStatus, DailyOrderSummary, SalesAnalytics } from '@/types';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 const ORDERS_STORAGE_KEY = 'namahaa_orders_v1';
@@ -55,43 +55,158 @@ export class OrderStore {
     return getStoredOrders();
   }
 
-  static async fetchOrdersFromSupabase(): Promise<Order[]> {
+  // Fetch Live Orders for a target date (defaults to Today IST)
+  static async fetchLiveOrders(targetDate?: string): Promise<{
+    orders: Order[];
+    date: string;
+    formattedDate: string;
+    summary: DailyOrderSummary;
+  }> {
     try {
-      const res = await fetch(`/api/admin/orders?t=${Date.now()}`, {
+      const url = targetDate
+        ? `/api/admin/orders?mode=live&date=${targetDate}&t=${Date.now()}`
+        : `/api/admin/orders?mode=live&t=${Date.now()}`;
+
+      const res = await fetch(url, {
         cache: 'no-store',
         headers: getAdminAuthHeaders(),
       });
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.orders)) {
-          const mapped: Order[] = json.orders.map((o: any) => ({
-            id: o.id,
-            orderNumber: o.order_number || o.orderNumber,
-            tableNumber: Number(o.table_number || o.tableNumber),
-            items: o.items || [],
-            totalAmount: Number(o.total_amount || o.totalAmount),
-            paymentMethod: o.payment_method || o.paymentMethod || 'cash_counter',
-            paymentStatus: o.payment_status || o.paymentStatus || 'pending',
-            orderStatus: o.order_status || o.orderStatus || 'pending',
-            customerName: o.customer_name || o.customerName || '',
-            customerPhone: o.customer_phone || o.customerPhone || '',
-            notes: o.notes || '',
-            sessionId: o.session_id || '',
-            paymentReference: o.payment_reference || '',
-            idempotencyKey: o.idempotency_key || '',
-            adminPaidBy: o.admin_paid_by || '',
-            adminPaidAt: o.admin_paid_at || '',
-            createdAt: o.created_at || o.createdAt || new Date().toISOString(),
-            updatedAt: o.updated_at || o.updatedAt || new Date().toISOString(),
-          }));
-          setStoredOrders(mapped);
-          return mapped;
+        if (json.success) {
+          return {
+            orders: json.orders || [],
+            date: json.date || '',
+            formattedDate: json.formattedDate || '',
+            summary: json.summary || {
+              date: '',
+              formattedDate: '',
+              orderCount: 0,
+              itemCount: 0,
+              totalOrderValue: 0,
+              averageOrderValue: 0,
+              activeCount: 0,
+              completedCount: 0,
+              cancelledCount: 0,
+            },
+          };
         }
       }
     } catch (err) {
-      console.warn('fetchOrdersFromSupabase error:', err);
+      console.warn('fetchLiveOrders error:', err);
     }
-    return getStoredOrders();
+
+    return {
+      orders: [],
+      date: targetDate || '',
+      formattedDate: targetDate || '',
+      summary: {
+        date: targetDate || '',
+        formattedDate: targetDate || '',
+        orderCount: 0,
+        itemCount: 0,
+        totalOrderValue: 0,
+        averageOrderValue: 0,
+        activeCount: 0,
+        completedCount: 0,
+        cancelledCount: 0,
+      },
+    };
+  }
+
+  // Fetch Compact Previous Days Summary List
+  static async fetchHistoryList(): Promise<DailyOrderSummary[]> {
+    try {
+      const res = await fetch(`/api/admin/orders?mode=history_list&t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: getAdminAuthHeaders(),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.historyList)) {
+          return json.historyList;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchHistoryList error:', err);
+    }
+    return [];
+  }
+
+  // Fetch Detailed Orders for a Specific Past Date
+  static async fetchDailyDetails(dateStr: string): Promise<{
+    orders: Order[];
+    date: string;
+    formattedDate: string;
+    summary: DailyOrderSummary;
+  }> {
+    try {
+      const res = await fetch(`/api/admin/orders?mode=daily_details&date=${dateStr}&t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: getAdminAuthHeaders(),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          return {
+            orders: json.orders || [],
+            date: json.date || dateStr,
+            formattedDate: json.formattedDate || dateStr,
+            summary: json.summary,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('fetchDailyDetails error:', err);
+    }
+    return {
+      orders: [],
+      date: dateStr,
+      formattedDate: dateStr,
+      summary: {
+        date: dateStr,
+        formattedDate: dateStr,
+        orderCount: 0,
+        itemCount: 0,
+        totalOrderValue: 0,
+        averageOrderValue: 0,
+        activeCount: 0,
+        completedCount: 0,
+        cancelledCount: 0,
+      },
+    };
+  }
+
+  // Fetch Sales Analytics for a Selected Range
+  static async fetchSalesAnalytics(
+    range: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<SalesAnalytics | null> {
+    try {
+      let url = `/api/admin/orders?mode=analytics&range=${range}&t=${Date.now()}`;
+      if (range === 'custom' && startDate && endDate) {
+        url += `&startDate=${startDate}&endDate=${endDate}`;
+      }
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: getAdminAuthHeaders(),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.analytics) {
+          return json.analytics;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchSalesAnalytics error:', err);
+    }
+    return null;
+  }
+
+  static async fetchOrdersFromSupabase(): Promise<Order[]> {
+    const { orders } = await this.fetchLiveOrders();
+    return orders;
   }
 
   static async fetchCustomerOrders(tableNumber?: number | null, sessionId?: string): Promise<Order[]> {
@@ -199,7 +314,6 @@ export class OrderStore {
       const data = await res.json();
       if (res.ok && data.success && data.order) {
         const current = getStoredOrders();
-        // Prevent local duplication if order already in array
         const existingIdx = current.findIndex((o) => o.id === data.order.id);
         let updated = [];
         if (existingIdx !== -1) {
@@ -227,7 +341,6 @@ export class OrderStore {
     orderId: string,
     orderStatus: OrderStatus
   ): Promise<boolean> {
-    // Optimistic UI local state update first
     const orders = getStoredOrders();
     const idx = orders.findIndex((o) => o.id === orderId);
     let previousOrderState: Order | null = null;
@@ -249,7 +362,6 @@ export class OrderStore {
       if (res.ok && data.success) {
         return true;
       } else {
-        // Rollback on error
         if (previousOrderState && idx !== -1) {
           orders[idx] = previousOrderState;
           setStoredOrders(orders);
@@ -259,7 +371,7 @@ export class OrderStore {
       }
     } catch (err) {
       console.error('updateOrderStatus error:', err);
-      return true; // Keep local optimistic state on network error
+      return true;
     }
   }
 
@@ -287,7 +399,6 @@ export class OrderStore {
             'postgres_changes',
             { event: '*', schema: 'public', table: 'orders' },
             (payload) => {
-              // Immediately invoke callback with payload to allow instant delta updates
               onOrderUpdate(payload);
             }
           )
@@ -317,5 +428,3 @@ export class OrderStore {
     };
   }
 }
-
-

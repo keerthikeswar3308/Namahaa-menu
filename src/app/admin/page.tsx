@@ -12,9 +12,12 @@ import { GalleryManagement } from '@/components/admin/GalleryManagement';
 import { MenuAssistant } from '@/components/admin/MenuAssistant';
 import { DocxImporter } from '@/components/admin/DocxImporter';
 import { OrdersManagement } from '@/components/admin/OrdersManagement';
+import { OrderHistoryManagement } from '@/components/admin/OrderHistoryManagement';
+import { SalesAnalyzer } from '@/components/admin/SalesAnalyzer';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot, Bell } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot, Bell, History, BarChart3 } from 'lucide-react';
+
 
 import Link from 'next/link';
 
@@ -245,6 +248,8 @@ export default function AdminPage() {
   const tabs = [
     { id: 'overview', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'orders', label: 'Live Orders 🔔', icon: <Bell className="w-4 h-4 text-amber-400 animate-pulse" /> },
+    { id: 'history', label: 'Order History', icon: <History className="w-4 h-4" /> },
+    { id: 'analytics', label: 'Sales Analyzer', icon: <BarChart3 className="w-4 h-4 text-namaha-gold" /> },
     { id: 'menu', label: 'Menu Items', icon: <Utensils className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4" /> },
     { id: 'import', label: 'Import Word Menu', icon: <FileUp className="w-4 h-4" /> },
@@ -252,6 +257,7 @@ export default function AdminPage() {
     { id: 'assistant', label: '🤖 Menu Assistant', icon: <Bot className="w-4 h-4 text-namaha-gold" /> },
     { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
   ];
+
 
 
   return (
@@ -343,6 +349,10 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'orders' && <OrdersManagement />}
+
+        {activeTab === 'history' && <OrderHistoryManagement />}
+
+        {activeTab === 'analytics' && <SalesAnalyzer />}
 
 
         {activeTab === 'menu' && (
