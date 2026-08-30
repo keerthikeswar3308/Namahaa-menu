@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { NamahaLogo } from './NamahaLogo';
-import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart, ShoppingCart, ShoppingBag, ChevronDown } from 'lucide-react';
+import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart, ShoppingCart, ShoppingBag, ChevronDown, ClipboardList } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 import { useTheme } from '@/lib/theme';
 import { useCart } from '@/lib/cartContext';
@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [restaurantName, setRestaurantName] = useState('Namahaa Tiffin Room');
   const { theme, toggleTheme } = useTheme();
-  const { wishlist, openWishlist, totalCount, openCart } = useCart();
+  const { wishlist, openWishlist, totalCount, openCart, openOrders } = useCart();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -128,7 +128,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
 
-              {/* 3. Theme / Brightness Icon (Moon/Sun) */}
+              {/* 3. Your Orders Icon */}
+              <button
+                onClick={openOrders}
+                className="relative w-9 h-9 rounded-full flex items-center justify-center bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#D97706] dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition active:scale-95 shadow-xs"
+                aria-label="View Placed Orders"
+                title="Your Orders"
+              >
+                <ClipboardList className="w-4 h-4" />
+              </button>
+
+              {/* 4. Theme / Brightness Icon (Moon/Sun) */}
               <button
                 onClick={toggleTheme}
                 className="w-9 h-9 rounded-full flex items-center justify-center bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#D97706] dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition active:scale-95 shadow-xs"
@@ -192,6 +202,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {totalCount}
                 </span>
               )}
+            </button>
+
+            {/* Top Orders Button */}
+            <button
+              onClick={openOrders}
+              className="relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-50 dark:bg-white/10 text-slate-700 dark:text-gray-200 hover:bg-emerald-100 dark:hover:bg-white/20 border-emerald-900/10 dark:border-white/10 shadow-sm transition-all"
+              aria-label="View Placed Orders"
+              title="Your Orders"
+            >
+              <ClipboardList className="w-4 h-4 text-namaha-gold-warm dark:text-namaha-gold" />
+              <span>Your Orders</span>
             </button>
 
             {/* Wishlist Button */}

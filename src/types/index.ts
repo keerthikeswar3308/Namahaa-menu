@@ -60,3 +60,39 @@ export interface GalleryImage {
 }
 
 export type FilterType = 'all' | 'veg' | 'popular' | 'chef_special' | 'today_special' | 'available';
+
+export type OrderStatus = 'pending' | 'preparing' | 'served' | 'completed' | 'cancelled';
+
+export interface OrderItem {
+  id: string;
+  name: string;
+  price: number; // Unit price snapshot at order time
+  quantity: number;
+  image?: string;
+  isVeg?: boolean;
+  notes?: string;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  tableNumber: number;
+  items: OrderItem[];
+  totalAmount: number;
+  orderStatus: OrderStatus;
+  customerName?: string;
+  customerPhone?: string;
+  notes?: string;
+  sessionId?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paymentReference?: string;
+  idempotencyKey?: string;
+  adminPaidBy?: string;
+  adminPaidAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+
+

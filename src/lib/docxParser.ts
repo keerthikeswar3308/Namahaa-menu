@@ -1,4 +1,3 @@
-import mammoth from 'mammoth';
 import { Category, MenuItem } from '@/types';
 
 export interface ParsedImportResult {
@@ -11,6 +10,8 @@ export async function parseDocxMenu(file: File): Promise<ParsedImportResult> {
 
   if (file.name.endsWith('.docx') || file.type.includes('wordprocessingml')) {
     const arrayBuffer = await file.arrayBuffer();
+    const mammothModule = await import('mammoth');
+    const mammoth = mammothModule.default || mammothModule;
     const result = await mammoth.extractRawText({ arrayBuffer });
     textContent = result.value;
   } else {

@@ -93,10 +93,24 @@ export async function POST(request: NextRequest) {
 
       if (catError) {
         console.error('Supabase categories sync error:', catError);
-        return NextResponse.json(
-          { success: false, error: `Failed to sync categories to Supabase: ${catError.message}` },
-          { status: 500 }
-        );
+        const isRlsError =
+          catError.message?.includes('row-level security') ||
+          catError.code === '42501';
+
+        // If it's an RLS error and we have menu items to sync, log a warning and proceed with menu items sync
+        if (isRlsError && items && items.length > 0) {
+          console.warn(
+            'Categories sync encountered RLS policy restriction. Proceeding to sync menu items.'
+          );
+        } else {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Failed to sync categories to Supabase: ${catError.message}. (Fix: Add your Supabase service_role key to SUPABASE_SERVICE_ROLE_KEY or run the RLS SQL script in Supabase Dashboard SQL Editor).`,
+            },
+            { status: 500 }
+          );
+        }
       }
     }
 
@@ -214,7 +228,7 @@ export async function POST(request: NextRequest) {
       if (infoError) {
         console.error('Supabase restaurant_info sync error:', infoError);
         return NextResponse.json(
-          { success: false, error: `Failed to sync restaurant info to Supabase: ${infoError.message}` },
+          { success: false, error: `Failed to save restaurant info to Supabase: ${infoError.message}` },
           { status: 500 }
         );
       }

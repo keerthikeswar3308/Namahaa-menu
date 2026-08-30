@@ -69,8 +69,41 @@ CREATE TABLE IF NOT EXISTS public.restaurant_info (
     announcement_text TEXT,
     is_restaurant_open BOOLEAN DEFAULT true,
     copyright_text TEXT,
+    upi_id TEXT,
+    upi_qr_url TEXT,
+    payment_name TEXT,
+    payment_instructions TEXT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- If table already exists without payment columns:
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'restaurant_info' AND column_name = 'upi_id'
+    ) THEN
+        ALTER TABLE public.restaurant_info ADD COLUMN upi_id TEXT;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'restaurant_info' AND column_name = 'upi_qr_url'
+    ) THEN
+        ALTER TABLE public.restaurant_info ADD COLUMN upi_qr_url TEXT;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'restaurant_info' AND column_name = 'payment_name'
+    ) THEN
+        ALTER TABLE public.restaurant_info ADD COLUMN payment_name TEXT;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'restaurant_info' AND column_name = 'payment_instructions'
+    ) THEN
+        ALTER TABLE public.restaurant_info ADD COLUMN payment_instructions TEXT;
+    END IF;
+END $$;
 
 -- 4. Create Gallery Table
 CREATE TABLE IF NOT EXISTS public.gallery (
@@ -98,9 +131,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read access on categories') THEN
         CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all management operations on categories') THEN
-        CREATE POLICY "Allow all management operations on categories" ON public.categories FOR ALL USING (true);
-    END IF;
+    DROP POLICY IF EXISTS "Allow all management operations on categories" ON public.categories;
+    CREATE POLICY "Allow all management operations on categories" ON public.categories FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 -- Menu Items RLS
@@ -109,9 +141,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read access on menu_items') THEN
         CREATE POLICY "Allow public read access on menu_items" ON public.menu_items FOR SELECT USING (true);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all management operations on menu_items') THEN
-        CREATE POLICY "Allow all management operations on menu_items" ON public.menu_items FOR ALL USING (true);
-    END IF;
+    DROP POLICY IF EXISTS "Allow all management operations on menu_items" ON public.menu_items;
+    CREATE POLICY "Allow all management operations on menu_items" ON public.menu_items FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 -- Restaurant Info RLS
@@ -120,9 +151,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read access on restaurant_info') THEN
         CREATE POLICY "Allow public read access on restaurant_info" ON public.restaurant_info FOR SELECT USING (true);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all management operations on restaurant_info') THEN
-        CREATE POLICY "Allow all management operations on restaurant_info" ON public.restaurant_info FOR ALL USING (true);
-    END IF;
+    DROP POLICY IF EXISTS "Allow all management operations on restaurant_info" ON public.restaurant_info;
+    CREATE POLICY "Allow all management operations on restaurant_info" ON public.restaurant_info FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 -- Gallery RLS
@@ -131,9 +161,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read access on gallery') THEN
         CREATE POLICY "Allow public read access on gallery" ON public.gallery FOR SELECT USING (true);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow all management operations on gallery') THEN
-        CREATE POLICY "Allow all management operations on gallery" ON public.gallery FOR ALL USING (true);
-    END IF;
+    DROP POLICY IF EXISTS "Allow all management operations on gallery" ON public.gallery;
+    CREATE POLICY "Allow all management operations on gallery" ON public.gallery FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 -- ========================================================
@@ -152,3 +181,101 @@ BEGIN
         CREATE POLICY "Public Read Food Images" ON storage.objects FOR SELECT USING (bucket_id = 'food-images');
     END IF;
 END $$;
+
+-- ========================================================
+-- 6. CREATE LIVE ORDERS TABLE, ORDER ITEMS & RLS POLICIES
+-- ========================================================
+CREATE TABLE IF NOT EXISTS public.orders (
+    id TEXT PRIMARY KEY,
+    order_number TEXT NOT NULL,
+    table_number INT NOT NULL,
+    items JSONB NOT NULL,
+    total_amount NUMERIC(10, 2) NOT NULL,
+    payment_method TEXT DEFAULT 'cash_counter',
+    payment_status TEXT DEFAULT 'pending',
+    order_status TEXT DEFAULT 'pending',
+    customer_name TEXT,
+    customer_phone TEXT,
+    notes TEXT,
+    session_id TEXT,
+    payment_reference TEXT,
+    idempotency_key TEXT UNIQUE,
+    admin_paid_by TEXT,
+    admin_paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure missing columns are dynamically added if table pre-exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'session_id') THEN
+        ALTER TABLE public.orders ADD COLUMN session_id TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'payment_reference') THEN
+        ALTER TABLE public.orders ADD COLUMN payment_reference TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'idempotency_key') THEN
+        ALTER TABLE public.orders ADD COLUMN idempotency_key TEXT UNIQUE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'admin_paid_by') THEN
+        ALTER TABLE public.orders ADD COLUMN admin_paid_by TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'admin_paid_at') THEN
+        ALTER TABLE public.orders ADD COLUMN admin_paid_at TIMESTAMPTZ;
+    END IF;
+END $$;
+
+-- Create relational order items snapshot table
+CREATE TABLE IF NOT EXISTS public.order_items (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+    menu_item_id TEXT,
+    item_name_snapshot TEXT NOT NULL,
+    unit_price_snapshot NUMERIC(10, 2) NOT NULL,
+    quantity INT NOT NULL,
+    line_total NUMERIC(10, 2) NOT NULL,
+    special_instructions TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public insert orders') THEN
+        CREATE POLICY "Allow public insert orders" ON public.orders FOR INSERT WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read session orders') THEN
+        CREATE POLICY "Allow public read session orders" ON public.orders FOR SELECT USING (true);
+    END IF;
+    DROP POLICY IF EXISTS "Allow all management operations on orders" ON public.orders;
+    CREATE POLICY "Allow all management operations on orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read order items') THEN
+        CREATE POLICY "Allow public read order items" ON public.order_items FOR SELECT USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public insert order items') THEN
+        CREATE POLICY "Allow public insert order items" ON public.order_items FOR INSERT WITH CHECK (true);
+    END IF;
+    DROP POLICY IF EXISTS "Allow all management operations on order_items" ON public.order_items;
+    CREATE POLICY "Allow all management operations on order_items" ON public.order_items FOR ALL USING (true) WITH CHECK (true);
+END $$;
+
+-- ========================================================
+-- 7. ENABLE SUPABASE REALTIME PUBLICATION FOR ORDERS
+-- Enables instant cross-device WebSocket broadcasts to Admin Live Orders KDS
+-- ========================================================
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
+    END IF;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+
+

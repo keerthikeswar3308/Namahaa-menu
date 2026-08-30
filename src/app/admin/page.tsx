@@ -11,9 +11,11 @@ import { SettingsManagement } from '@/components/admin/SettingsManagement';
 import { GalleryManagement } from '@/components/admin/GalleryManagement';
 import { MenuAssistant } from '@/components/admin/MenuAssistant';
 import { DocxImporter } from '@/components/admin/DocxImporter';
+import { OrdersManagement } from '@/components/admin/OrdersManagement';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot, Bell } from 'lucide-react';
+
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -123,7 +125,6 @@ export default function AdminPage() {
   const handleSaveInfo = async (newInfo: RestaurantInfo) => {
     const updated = await NamahaStore.updateRestaurantInfo(newInfo);
     setRestaurantInfo(updated);
-    await loadAllData();
   };
 
   const handleSaveGalleryImage = async (imgData: GalleryImage | Omit<GalleryImage, 'id'>) => {
@@ -243,6 +244,7 @@ export default function AdminPage() {
 
   const tabs = [
     { id: 'overview', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'orders', label: 'Live Orders 🔔', icon: <Bell className="w-4 h-4 text-amber-400 animate-pulse" /> },
     { id: 'menu', label: 'Menu Items', icon: <Utensils className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4" /> },
     { id: 'import', label: 'Import Word Menu', icon: <FileUp className="w-4 h-4" /> },
@@ -250,6 +252,7 @@ export default function AdminPage() {
     { id: 'assistant', label: '🤖 Menu Assistant', icon: <Bot className="w-4 h-4 text-namaha-gold" /> },
     { id: 'settings', label: 'Restaurant Settings', icon: <Settings className="w-4 h-4" /> },
   ];
+
 
   return (
     <div className="min-h-screen bg-namaha-green-cream dark:bg-namaha-green-deep text-slate-800 dark:text-white flex flex-col justify-between transition-colors duration-300">
@@ -338,6 +341,9 @@ export default function AdminPage() {
             onResetMenu={handleResetMenu}
           />
         )}
+
+        {activeTab === 'orders' && <OrdersManagement />}
+
 
         {activeTab === 'menu' && (
           <MenuManagement

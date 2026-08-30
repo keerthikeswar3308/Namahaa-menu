@@ -1,5 +1,13 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+  weight: ['400', '500', '600', '700', '800'],
+});
 
 export const metadata: Metadata = {
   title: 'Namahaa Tiffin Room | Premium Digital QR Menu & South Indian Heritage',
@@ -73,7 +81,7 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en" className="scroll-smooth">
+    <html lang="en" className={`scroll-smooth ${inter.variable}`}>
       <head>
         <script
           type="application/ld+json"
@@ -81,7 +89,7 @@ export default function RootLayout({
         />
         <link rel="icon" href="/logo-circle.svg" type="image/svg+xml" />
       </head>
-      <body className="antialiased selection:bg-namaha-gold selection:text-namaha-green-deep min-h-screen flex flex-col justify-between bg-namaha-green-cream dark:bg-namaha-green-deep text-namaha-green-deep dark:text-white transition-colors duration-300">
+      <body className={`${inter.className} antialiased selection:bg-namaha-gold selection:text-namaha-green-deep min-h-screen flex flex-col justify-between bg-namaha-green-cream dark:bg-namaha-green-deep text-namaha-green-deep dark:text-white transition-colors duration-300`}>
         <ThemeProvider>
           {children}
         </ThemeProvider>

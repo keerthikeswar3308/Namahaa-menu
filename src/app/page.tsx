@@ -63,32 +63,13 @@ function HomeContent() {
 
     refreshAllData();
 
-    // 1. Subscribe to Realtime DB & local store updates
+    // Subscribe to Realtime DB & local store updates (menu changes, category edits)
     const unsubscribe = NamahaStore.subscribeToRealtimeChanges(() => {
       refreshAllData();
     });
 
-    // 2. Periodic sync every 25 seconds (only while page is actively in view)
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        refreshAllData();
-      }
-    }, 25000);
-
-    // 3. Sync immediately when user switches tabs or unlocks phone
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshAllData();
-      }
-    };
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
-
     return () => {
       unsubscribe();
-      clearInterval(interval);
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
 

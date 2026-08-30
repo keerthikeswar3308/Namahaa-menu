@@ -17,6 +17,8 @@ import {
   EyeOff,
   Lock,
   RefreshCw,
+  QrCode,
+  Upload,
 } from 'lucide-react';
 
 interface SettingsManagementProps {

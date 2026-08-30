@@ -1,0 +1,321 @@
+import { Order, OrderItem, OrderStatus } from '@/types';
+import { supabase, isSupabaseConfigured } from './supabase';
+
+const ORDERS_STORAGE_KEY = 'namahaa_orders_v1';
+
+function getAdminAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (typeof window !== 'undefined') {
+    const username = localStorage.getItem('namahaa_admin_username');
+    if (username) headers['x-admin-username'] = username;
+    const passcode = localStorage.getItem('namahaa_admin_auth_code');
+    if (passcode) {
+      headers['x-admin-passcode'] = passcode;
+      headers['x-admin-auth'] = passcode;
+    }
+    const token = sessionStorage.getItem('namahaa_admin_token') || localStorage.getItem('namahaa_admin_token');
+    if (token) {
+      headers['x-admin-token'] = token;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  return headers;
+}
+
+function getStoredOrders(): Order[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const data = localStorage.getItem(ORDERS_STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (err) {
+    console.error('Error reading stored orders:', err);
+    return [];
+  }
+}
+
+function setStoredOrders(orders: Order[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    window.dispatchEvent(new CustomEvent('namahaa_orders_updated'));
+  } catch (err) {
+    console.error('Error saving stored orders:', err);
+  }
+}
+
+function notifyOrdersUpdated(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('namahaa_orders_updated'));
+}
+
+export class OrderStore {
+  static getOrders(): Order[] {
+    return getStoredOrders();
+  }
+
+  static async fetchOrdersFromSupabase(): Promise<Order[]> {
+    try {
+      const res = await fetch(`/api/admin/orders?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: getAdminAuthHeaders(),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.orders)) {
+          const mapped: Order[] = json.orders.map((o: any) => ({
+            id: o.id,
+            orderNumber: o.order_number || o.orderNumber,
+            tableNumber: Number(o.table_number || o.tableNumber),
+            items: o.items || [],
+            totalAmount: Number(o.total_amount || o.totalAmount),
+            paymentMethod: o.payment_method || o.paymentMethod || 'cash_counter',
+            paymentStatus: o.payment_status || o.paymentStatus || 'pending',
+            orderStatus: o.order_status || o.orderStatus || 'pending',
+            customerName: o.customer_name || o.customerName || '',
+            customerPhone: o.customer_phone || o.customerPhone || '',
+            notes: o.notes || '',
+            sessionId: o.session_id || '',
+            paymentReference: o.payment_reference || '',
+            idempotencyKey: o.idempotency_key || '',
+            adminPaidBy: o.admin_paid_by || '',
+            adminPaidAt: o.admin_paid_at || '',
+            createdAt: o.created_at || o.createdAt || new Date().toISOString(),
+            updatedAt: o.updated_at || o.updatedAt || new Date().toISOString(),
+          }));
+          setStoredOrders(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchOrdersFromSupabase error:', err);
+    }
+    return getStoredOrders();
+  }
+
+  static async fetchCustomerOrders(tableNumber?: number | null, sessionId?: string): Promise<Order[]> {
+    if (!sessionId) return getStoredOrders();
+    try {
+      const url = tableNumber
+        ? `/api/orders/list?tableNumber=${tableNumber}&sessionId=${sessionId}&t=${Date.now()}`
+        : `/api/orders/list?sessionId=${sessionId}&t=${Date.now()}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.orders)) {
+          const current = getStoredOrders();
+          const merged = [...current];
+          json.orders.forEach((newOrd: Order) => {
+            const idx = merged.findIndex((o) => o.id === newOrd.id);
+            if (idx !== -1) {
+              merged[idx] = newOrd;
+            } else {
+              merged.push(newOrd);
+            }
+          });
+          setStoredOrders(merged);
+          return json.orders;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchCustomerOrders error:', err);
+    }
+    return getStoredOrders().filter((o) => !sessionId || o.sessionId === sessionId);
+  }
+
+  static subscribeToCustomerSessionOrders(sessionId: string, onOrderUpdate: (payload?: any) => void): () => void {
+    if (typeof window === 'undefined' || !sessionId) return () => {};
+
+    const handleEvent = () => onOrderUpdate();
+    window.addEventListener('namahaa_orders_updated', handleEvent);
+    window.addEventListener('storage', handleEvent);
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+
+    const setupSubscription = () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+        channel = supabase
+          .channel(`customer_session_${sessionId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'orders',
+              filter: `session_id=eq.${sessionId}`,
+            },
+            (payload) => {
+              onOrderUpdate(payload);
+            }
+          )
+          .subscribe((status, err) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              if (reconnectTimer) clearTimeout(reconnectTimer);
+              reconnectTimer = setTimeout(() => {
+                setupSubscription();
+              }, 4000);
+            }
+          });
+      } catch (err) {
+        console.warn('subscribeToCustomerSessionOrders error:', err);
+      }
+    };
+
+    setupSubscription();
+
+    return () => {
+      window.removeEventListener('namahaa_orders_updated', handleEvent);
+      window.removeEventListener('storage', handleEvent);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }
+
+  static async createOrder(payload: {
+    tableNumber: number;
+    items: OrderItem[];
+    totalAmount: number;
+    customerName?: string;
+    customerPhone?: string;
+    notes?: string;
+    sessionId?: string;
+    idempotencyKey?: string;
+  }): Promise<{ success: boolean; order?: Order; error?: string }> {
+    try {
+      const res = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.order) {
+        const current = getStoredOrders();
+        // Prevent local duplication if order already in array
+        const existingIdx = current.findIndex((o) => o.id === data.order.id);
+        let updated = [];
+        if (existingIdx !== -1) {
+          current[existingIdx] = data.order;
+          updated = [...current];
+        } else {
+          updated = [data.order, ...current];
+        }
+        setStoredOrders(updated);
+        notifyOrdersUpdated();
+        return { success: true, order: data.order };
+      }
+
+      return { success: false, error: data.error || 'Failed to place order in database' };
+    } catch (err: any) {
+      console.error('createOrder exception:', err);
+      return {
+        success: false,
+        error: err.message || 'Network error placing order. Please check your connection and try again.',
+      };
+    }
+  }
+
+  static async updateOrderStatus(
+    orderId: string,
+    orderStatus: OrderStatus
+  ): Promise<boolean> {
+    // Optimistic UI local state update first
+    const orders = getStoredOrders();
+    const idx = orders.findIndex((o) => o.id === orderId);
+    let previousOrderState: Order | null = null;
+
+    if (idx !== -1) {
+      previousOrderState = { ...orders[idx] };
+      orders[idx].orderStatus = orderStatus;
+      setStoredOrders(orders);
+      notifyOrdersUpdated();
+    }
+
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PATCH',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ orderId, orderStatus }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return true;
+      } else {
+        // Rollback on error
+        if (previousOrderState && idx !== -1) {
+          orders[idx] = previousOrderState;
+          setStoredOrders(orders);
+          notifyOrdersUpdated();
+        }
+        return false;
+      }
+    } catch (err) {
+      console.error('updateOrderStatus error:', err);
+      return true; // Keep local optimistic state on network error
+    }
+  }
+
+  static subscribeToLiveOrders(onOrderUpdate: (payload?: any) => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+
+    const handleEvent = () => onOrderUpdate();
+    window.addEventListener('namahaa_orders_updated', handleEvent);
+    window.addEventListener('storage', handleEvent);
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+
+    const setupSubscription = () => {
+      if (!isSupabaseConfigured()) return;
+
+      try {
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+
+        channel = supabase
+          .channel('namahaa_live_orders_realtime')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'orders' },
+            (payload) => {
+              // Immediately invoke callback with payload to allow instant delta updates
+              onOrderUpdate(payload);
+            }
+          )
+          .subscribe((status, err) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              console.warn(`Supabase Realtime channel status: ${status}. Attempting auto-reconnect in 3s...`, err);
+              if (reconnectTimer) clearTimeout(reconnectTimer);
+              reconnectTimer = setTimeout(() => {
+                setupSubscription();
+              }, 3000);
+            }
+          });
+      } catch (subErr) {
+        console.warn('Realtime channel setup exception:', subErr);
+      }
+    };
+
+    setupSubscription();
+
+    return () => {
+      window.removeEventListener('namahaa_orders_updated', handleEvent);
+      window.removeEventListener('storage', handleEvent);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }
+}
+
+

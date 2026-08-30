@@ -9,46 +9,23 @@ export const fetchCache = 'force-no-store';
 
 export async function GET() {
   try {
-    // 1. Fetch Categories from Supabase (Source of Truth)
-    let { data: categories, error: catError } = await supabaseAdmin
-      .from('categories')
-      .select('*')
-      .order('display_order', { ascending: true });
+    // 1. Parallel execution of all table queries via Promise.all to minimize Cloudflare Worker CPU execution time
+    const [catRes, menuRes, infoRes, galRes] = await Promise.all([
+      supabaseAdmin.from('categories').select('*').order('display_order', { ascending: true }),
+      supabaseAdmin.from('menu_items').select('*').order('display_order', { ascending: true }),
+      supabaseAdmin.from('restaurant_info').select('*').limit(1).single(),
+      supabaseAdmin.from('gallery').select('*').order('created_at', { ascending: false }),
+    ]);
 
-    if (catError) {
-      console.warn('API /api/menu categories fetch error:', catError);
-    }
+    let categories = catRes.data;
+    let menuItems = menuRes.data;
+    let restaurantInfo = infoRes.data;
+    let gallery = galRes.data;
 
-    // 2. Fetch Menu Items from Supabase (Source of Truth)
-    let { data: menuItems, error: menuError } = await supabaseAdmin
-      .from('menu_items')
-      .select('*')
-      .order('display_order', { ascending: true });
-
-    if (menuError) {
-      console.warn('API /api/menu items fetch error:', menuError);
-    }
-
-    // 3. Fetch Restaurant Info from Supabase
-    let { data: restaurantInfo, error: infoError } = await supabaseAdmin
-      .from('restaurant_info')
-      .select('*')
-      .limit(1)
-      .single();
-
-    if (infoError && infoError.code !== 'PGRST116') {
-      console.warn('API /api/menu restaurant_info fetch error:', infoError);
-    }
-
-    // 4. Fetch Gallery from Supabase
-    let { data: gallery, error: galError } = await supabaseAdmin
-      .from('gallery')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (galError) {
-      console.warn('API /api/menu gallery fetch error:', galError);
-    }
+    if (catRes.error) console.warn('API /api/menu categories fetch error:', catRes.error);
+    if (menuRes.error) console.warn('API /api/menu items fetch error:', menuRes.error);
+    if (infoRes.error && infoRes.error.code !== 'PGRST116') console.warn('API /api/menu restaurant_info fetch error:', infoRes.error);
+    if (galRes.error) console.warn('API /api/menu gallery fetch error:', galRes.error);
 
     // --- SEEDING SAFETY: ONLY seed if tables are completely empty (0 records) ---
     // If Supabase contains existing Admin records, NEVER overwrite them.
@@ -105,7 +82,7 @@ export async function GET() {
     }
 
     if (!restaurantInfo) {
-      const { error: seedInfoErr } = await supabaseAdmin.from('restaurant_info').upsert({
+      let seedPayload: any = {
         id: 1,
         name: defaultRestaurantInfo.name,
         tagline: defaultRestaurantInfo.tagline,
@@ -124,7 +101,9 @@ export async function GET() {
         announcement_text: defaultRestaurantInfo.announcementText,
         is_restaurant_open: defaultRestaurantInfo.isRestaurantOpen,
         copyright_text: defaultRestaurantInfo.copyrightText,
-      }, { onConflict: 'id' });
+      };
+
+      const { error: seedInfoErr } = await supabaseAdmin.from('restaurant_info').upsert(seedPayload, { onConflict: 'id' });
 
       if (!seedInfoErr) {
         const recheckInfo = await supabaseAdmin.from('restaurant_info').select('*').limit(1).single();
@@ -168,10 +147,7 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-          'Surrogate-Control': 'no-store',
+          'Cache-Control': 'public, max-age=30, stale-while-revalidate=300',
         },
       }
     );

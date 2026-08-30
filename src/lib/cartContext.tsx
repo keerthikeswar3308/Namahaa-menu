@@ -20,6 +20,9 @@ interface CartContextType {
   isCartOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
+  cartViewMode: 'cart' | 'orders';
+  setCartViewMode: (mode: 'cart' | 'orders') => void;
+  openOrders: () => void;
   wishlist: MenuItem[];
   toggleWishlist: (item: MenuItem) => void;
   isInWishlist: (itemId: string) => boolean;
@@ -42,6 +45,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<MenuItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartViewMode, setCartViewMode] = useState<'cart' | 'orders'>('cart');
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -181,8 +185,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
         totalPrice,
         getItemQuantity,
         isCartOpen,
-        openCart: () => setIsCartOpen(true),
+        openCart: () => {
+          setCartViewMode('cart');
+          setIsCartOpen(true);
+        },
         closeCart: () => setIsCartOpen(false),
+        cartViewMode,
+        setCartViewMode,
+        openOrders: () => {
+          setCartViewMode('orders');
+          setIsCartOpen(true);
+        },
         wishlist,
         toggleWishlist,
         isInWishlist,

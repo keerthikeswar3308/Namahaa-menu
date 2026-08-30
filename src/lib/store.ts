@@ -52,7 +52,7 @@ function getAdminAuthHeaders(): Record<string, string> {
       headers['x-admin-passcode'] = passcode;
       headers['x-admin-auth'] = passcode;
     }
-    const token = sessionStorage.getItem('namahaa_admin_token');
+    const token = sessionStorage.getItem('namahaa_admin_token') || localStorage.getItem('namahaa_admin_token');
     if (token) {
       headers['x-admin-token'] = token;
       headers['Authorization'] = `Bearer ${token}`;
@@ -101,13 +101,7 @@ export class NamahaStore {
     gallery: GalleryImage[];
   }> {
     try {
-      const res = await fetch(`/api/menu?t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
+      const res = await fetch('/api/menu');
 
       if (res.ok) {
         const json = await res.json();
@@ -153,6 +147,7 @@ export class NamahaStore {
           // 3. Restaurant Info from Supabase
           if (json.restaurantInfo) {
             const d = json.restaurantInfo;
+            const existingLocal = this.getRestaurantInfo();
             const mappedInfo: RestaurantInfo = {
               name: d.name || defaultRestaurantInfo.name,
               tagline: d.tagline || defaultRestaurantInfo.tagline,
@@ -175,6 +170,7 @@ export class NamahaStore {
               themeGoldColor: '#E6A12A',
             };
             setStoredItem(STORAGE_KEYS.RESTAURANT_INFO, mappedInfo);
+            notifyStoreUpdated();
           }
 
           // 4. Gallery from Supabase
@@ -281,7 +277,6 @@ export class NamahaStore {
     // 1. Send data to secure server API to write to Supabase
     const syncRes = await callAdminSyncApi({
       items: [updatedItem],
-      categories: this.getCategories(),
       mode: 'merge',
     });
 
@@ -740,7 +735,11 @@ export class NamahaStore {
   static isAdminLoggedIn(): boolean {
     if (typeof window === 'undefined') return false;
     const hasAuth = localStorage.getItem(STORAGE_KEYS.ADMIN_AUTH) === 'true';
-    const hasToken = Boolean(sessionStorage.getItem('namahaa_admin_token'));
+    const hasToken = Boolean(
+      sessionStorage.getItem('namahaa_admin_token') ||
+      localStorage.getItem('namahaa_admin_token') ||
+      localStorage.getItem('namahaa_admin_auth_code')
+    );
     return hasAuth || hasToken;
   }
 
@@ -750,11 +749,13 @@ export class NamahaStore {
       localStorage.setItem(STORAGE_KEYS.ADMIN_AUTH, 'true');
       if (token) {
         sessionStorage.setItem('namahaa_admin_token', token);
+        localStorage.setItem('namahaa_admin_token', token);
       }
     } else {
       localStorage.removeItem(STORAGE_KEYS.ADMIN_AUTH);
       localStorage.removeItem('namahaa_admin_auth_code');
       localStorage.removeItem('namahaa_admin_username');
+      localStorage.removeItem('namahaa_admin_token');
       sessionStorage.removeItem('namahaa_admin_token');
       // Call server logout route to clear HttpOnly cookie
       fetch('/api/admin/auth', { method: 'DELETE' }).catch(() => {});

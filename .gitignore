@@ -31,7 +31,9 @@ next-env.d.ts
 
 # opennext / cloudflare
 .open-next/
+.wrangler/
 cloudflare-env.d.ts
+
 
 # OS / Editor files
 .DS_Store
