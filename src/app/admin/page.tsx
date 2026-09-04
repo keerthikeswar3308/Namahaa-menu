@@ -14,9 +14,10 @@ import { DocxImporter } from '@/components/admin/DocxImporter';
 import { OrdersManagement } from '@/components/admin/OrdersManagement';
 import { OrderHistoryManagement } from '@/components/admin/OrderHistoryManagement';
 import { SalesAnalyzer } from '@/components/admin/SalesAnalyzer';
+import { TableQrManagement } from '@/components/admin/TableQrManagement';
 import { NamahaLogo } from '@/components/NamahaLogo';
 import { ParsedImportResult } from '@/lib/docxParser';
-import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot, Bell, History, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot, Bell, History, BarChart3, QrCode } from 'lucide-react';
 
 
 import Link from 'next/link';
@@ -250,6 +251,7 @@ export default function AdminPage() {
     { id: 'orders', label: 'Live Orders 🔔', icon: <Bell className="w-4 h-4 text-amber-400 animate-pulse" /> },
     { id: 'history', label: 'Order History', icon: <History className="w-4 h-4" /> },
     { id: 'analytics', label: 'Sales Analyzer', icon: <BarChart3 className="w-4 h-4 text-namaha-gold" /> },
+    { id: 'qrcodes', label: 'Table QRs 📱', icon: <QrCode className="w-4 h-4 text-emerald-400" /> },
     { id: 'menu', label: 'Menu Items', icon: <Utensils className="w-4 h-4" /> },
     { id: 'categories', label: 'Categories', icon: <FolderTree className="w-4 h-4" /> },
     { id: 'import', label: 'Import Word Menu', icon: <FileUp className="w-4 h-4" /> },
@@ -353,6 +355,8 @@ export default function AdminPage() {
         {activeTab === 'history' && <OrderHistoryManagement />}
 
         {activeTab === 'analytics' && <SalesAnalyzer />}
+
+        {activeTab === 'qrcodes' && <TableQrManagement />}
 
         {activeTab === 'menu' && (
           <MenuManagement
