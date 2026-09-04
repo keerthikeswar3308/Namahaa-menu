@@ -12,6 +12,21 @@ const STORAGE_KEYS = {
   ADMIN_AUTH: 'namahaa_admin_auth',
 };
 
+const DEFAULT_TABLE_TOKENS: Record<number, string> = {
+  1: 'namahaa_tbl1_a9f2x7',
+  2: 'namahaa_tbl2_b8x4m3',
+  3: 'namahaa_tbl3_c7z9k1',
+  4: 'namahaa_tbl4_d6p8v2',
+  5: 'namahaa_tbl5_e5q3w9',
+  6: 'namahaa_tbl6_f4r1y5',
+  7: 'namahaa_tbl7_g3s7z8',
+  8: 'namahaa_tbl8_h2t9a4',
+  9: 'namahaa_tbl9_j1u5b6',
+  10: 'namahaa_tbl10_k9v2c3',
+  11: 'namahaa_tbl11_l8w6d7',
+  12: 'namahaa_tbl12_m7x4e8',
+};
+
 // Helper for local storage access in SSR safe manner (used only as temporary read-through cache)
 function getStoredItem<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -707,27 +722,147 @@ export class NamahaStore {
   }
 
   // =========================================================================
-  // 7. TABLE SESSION
+  // 7. TABLE SESSION & DEVICE SESSIONS (BUSINESS-DAY BOUNDARY AUTHORITATIVE)
   // =========================================================================
-  static getSelectedTable(): number | null {
-    if (typeof window === 'undefined') return null;
-    const val =
-      sessionStorage.getItem(STORAGE_KEYS.TABLE_NUMBER) ||
-      localStorage.getItem(STORAGE_KEYS.TABLE_NUMBER);
-    return val ? parseInt(val, 10) : null;
+  static checkAndPerformFreshCustomerReset(): void {
+    if (typeof window === 'undefined') return;
+    const currentVersion = localStorage.getItem('namahaa_reset_version');
+    const TARGET_RESET_VERSION = 'v3_clean_reset_2026_08_30';
+
+    if (currentVersion !== TARGET_RESET_VERSION) {
+      console.log('--- SYSTEM RESET: Clearing legacy customer order state ---');
+      sessionStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
+      localStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
+      sessionStorage.removeItem('namahaa_table_session_date');
+      localStorage.removeItem('namahaa_table_session_date');
+      localStorage.removeItem('namahaa_device_session_id');
+      localStorage.removeItem('namahaa_session_id');
+      sessionStorage.removeItem('namahaa_session_id');
+      localStorage.removeItem('namahaa_customer_cart_v2');
+      localStorage.removeItem('namahaa_orders_v1');
+      localStorage.removeItem('namahaa_customer_wishlist_v2');
+
+      localStorage.setItem('namahaa_reset_version', TARGET_RESET_VERSION);
+    }
   }
 
-  static setSelectedTable(tableNum: number): void {
+  static getDeviceSessionId(): string {
+    if (typeof window === 'undefined') return '';
+    this.checkAndPerformFreshCustomerReset();
+    let sessId = localStorage.getItem('namahaa_device_session_id');
+    if (!sessId) {
+      sessId = `sess-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem('namahaa_device_session_id', sessId);
+    }
+    return sessId;
+  }
+
+
+  static getSelectedTable(serverBusinessDate?: string): number | null {
+    if (typeof window === 'undefined') return null;
+    
+    // Calculate current IST business date string (04:00 AM late night cutoff)
+    const d = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(d.getTime() + istOffset + (d.getTimezoneOffset() * 60 * 1000));
+    if (ist.getHours() < 4) {
+      ist.setDate(ist.getDate() - 1);
+    }
+    const currentBusinessDate = serverBusinessDate || `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}-${String(ist.getDate()).padStart(2, '0')}`;
+
+    const storedDate = localStorage.getItem('namahaa_table_session_date') || sessionStorage.getItem('namahaa_table_session_date');
+    const val = sessionStorage.getItem(STORAGE_KEYS.TABLE_NUMBER) || localStorage.getItem(STORAGE_KEYS.TABLE_NUMBER);
+
+    if (!val) return null;
+
+    // BUSINESS DAY BOUNDARY CHECK: If stored session date is from a previous day, expire it!
+    if (storedDate && storedDate !== currentBusinessDate) {
+      console.warn(`Table session expired (Stored: ${storedDate}, Today: ${currentBusinessDate}). Requiring table selection.`);
+      this.clearSelectedTable();
+      return null;
+    }
+
+    return parseInt(val, 10);
+  }
+
+  static setSelectedTable(tableNum: number, businessDate?: string): void {
     if (typeof window === 'undefined') return;
+    const d = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(d.getTime() + istOffset + (d.getTimezoneOffset() * 60 * 1000));
+    if (ist.getHours() < 4) {
+      ist.setDate(ist.getDate() - 1);
+    }
+    const currentDate = businessDate || `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}-${String(ist.getDate()).padStart(2, '0')}`;
+
     sessionStorage.setItem(STORAGE_KEYS.TABLE_NUMBER, tableNum.toString());
     localStorage.setItem(STORAGE_KEYS.TABLE_NUMBER, tableNum.toString());
+    sessionStorage.setItem('namahaa_table_session_date', currentDate);
+    localStorage.setItem('namahaa_table_session_date', currentDate);
   }
 
   static clearSelectedTable(): void {
     if (typeof window === 'undefined') return;
     sessionStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
     localStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
+    sessionStorage.removeItem('namahaa_table_session_date');
+    localStorage.removeItem('namahaa_table_session_date');
   }
+
+  // =========================================================================
+  // 7.5. SECURE 12 TABLE QR TOKENS MANAGEMENT
+  // =========================================================================
+  static getTableTokensMap(): Record<number, string> {
+    if (typeof window === 'undefined') return DEFAULT_TABLE_TOKENS;
+    try {
+      const stored = localStorage.getItem('namahaa_table_tokens_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return { ...DEFAULT_TABLE_TOKENS, ...parsed };
+      }
+    } catch (e) {
+      console.warn('Error reading table tokens:', e);
+    }
+    return DEFAULT_TABLE_TOKENS;
+  }
+
+  static setTableTokensMap(map: Record<number, string>): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('namahaa_table_tokens_v1', JSON.stringify(map));
+      notifyStoreUpdated();
+    } catch (e) {
+      console.warn('Error saving table tokens:', e);
+    }
+  }
+
+  static validateTableToken(tokenStr: string): { valid: boolean; tableNumber?: number } {
+    if (!tokenStr) return { valid: false };
+    const cleanToken = tokenStr.trim();
+    const map = this.getTableTokensMap();
+    for (const [tblNumStr, tok] of Object.entries(map)) {
+      if (tok === cleanToken) {
+        return { valid: true, tableNumber: parseInt(tblNumStr, 10) };
+      }
+    }
+    return { valid: false };
+  }
+
+  static async regenerateTableToken(tableNumber: number): Promise<string> {
+    const newSub = Math.random().toString(36).substring(2, 8);
+    const newToken = `namahaa_tbl${tableNumber}_${newSub}`;
+    const map = this.getTableTokensMap();
+    map[tableNumber] = newToken;
+    this.setTableTokensMap(map);
+
+    try {
+      await callAdminSyncApi({ action: 'update_table_tokens', tableTokens: map });
+    } catch (err) {
+      console.warn('regenerateTableToken sync warning:', err);
+    }
+    return newToken;
+  }
+
 
   // =========================================================================
   // 8. ADMIN AUTH

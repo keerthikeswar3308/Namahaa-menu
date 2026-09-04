@@ -52,16 +52,68 @@ function HomeContent() {
   };
 
   useEffect(() => {
-    // Check initial table session
-    const currentTable = NamahaStore.getSelectedTable();
-    if (currentTable) {
-      setSelectedTable(currentTable);
-    } else {
-      // Auto open table selection prompt on first scan
-      setIsTableModalOpen(true);
-    }
+    const initCustomerSession = async () => {
+      const sessionId = NamahaStore.getDeviceSessionId();
+      
+      let requestedTable: number | null = null;
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const tParam = params.get('table') || params.get('table_number') || params.get('t');
+        if (tParam && !isNaN(parseInt(tParam, 10))) {
+          const num = parseInt(tParam, 10);
+          if (num >= 1 && num <= 12) {
+            requestedTable = num;
+          }
+        }
+      }
 
+      try {
+        const verifyUrl = requestedTable
+          ? `/api/session/verify?sessionId=${sessionId}&tableNumber=${requestedTable}&ts=${Date.now()}`
+          : `/api/session/verify?sessionId=${sessionId}&ts=${Date.now()}`;
+        
+        const res = await fetch(verifyUrl, { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) {
+            const serverDate = json.currentBusinessDate;
+            const activeTable = requestedTable || json.tableNumber || NamahaStore.getSelectedTable(serverDate);
+
+            if (activeTable) {
+              NamahaStore.setSelectedTable(activeTable, serverDate);
+              setSelectedTable(activeTable);
+              setIsTableModalOpen(false);
+            } else {
+              // No active table for today's business day -> Automatically prompt manual table selection
+              NamahaStore.clearSelectedTable();
+              setSelectedTable(null);
+              setIsTableModalOpen(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Session verify error:', err);
+        const clientTable = requestedTable || NamahaStore.getSelectedTable();
+        if (clientTable) {
+          setSelectedTable(clientTable);
+          setIsTableModalOpen(false);
+        } else {
+          setIsTableModalOpen(true);
+        }
+      }
+    };
+
+    initCustomerSession();
     refreshAllData();
+
+    // Re-verify business day if user re-opens/focuses tab after overnight idle
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        initCustomerSession();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
     // Subscribe to Realtime DB & local store updates (menu changes, category edits)
     const unsubscribe = NamahaStore.subscribeToRealtimeChanges(() => {
@@ -69,14 +121,18 @@ function HomeContent() {
     });
 
     return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
       unsubscribe();
     };
   }, []);
 
   const handleTableSelected = (tableNum: number) => {
+    NamahaStore.setSelectedTable(tableNum);
     setSelectedTable(tableNum);
     setIsTableModalOpen(false);
   };
+
 
   // Filtered Menu Logic
   const filteredItems = useMemo(() => {
@@ -151,6 +207,8 @@ function HomeContent() {
         onOpenTableSelector={() => setIsTableModalOpen(true)}
         onOpenSearch={handleOpenSearch}
       />
+
+
 
       {/* 2. Table Selector Modal */}
       <TableSelectorModal

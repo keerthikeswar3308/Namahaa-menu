@@ -61,7 +61,7 @@ export interface GalleryImage {
 
 export type FilterType = 'all' | 'veg' | 'popular' | 'chef_special' | 'today_special' | 'available';
 
-export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled' | 'merged';
 
 export interface OrderItem {
   id: string;
@@ -78,6 +78,10 @@ export interface Order {
   orderNumber: string;
   tableNumber: number;
   items: OrderItem[];
+  subtotalAmount?: number;
+  discountType?: 'percentage' | 'fixed' | 'round_off' | 'none';
+  discountValue?: number;
+  discountAmount?: number;
   totalAmount: number;
   orderStatus: OrderStatus;
   customerName?: string;
@@ -85,9 +89,12 @@ export interface Order {
   notes?: string;
   sessionId?: string;
   idempotencyKey?: string;
+  mergedIntoOrderId?: string;
+  mergedFromOrderNumbers?: string[];
   createdAt: string;
   updatedAt?: string;
 }
+
 
 export interface DailyOrderSummary {
   date: string; // YYYY-MM-DD
@@ -111,6 +118,10 @@ export interface CategorySales {
   categoryName: string;
   totalValue: number;
   quantitySold: number;
+  percentageOfTotalSales?: number;
+  uniqueItemCount?: number;
+  topItemName?: string;
+  topItemQty?: number;
 }
 
 export interface HourlySales {

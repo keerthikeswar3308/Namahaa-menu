@@ -28,6 +28,7 @@ export const SalesAnalyzer: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [itemSortKey, setItemSortKey] = useState<'quantity' | 'value'>('quantity');
+  const [catSortKey, setCatSortKey] = useState<'value' | 'quantity' | 'name'>('value');
 
   const loadAnalytics = async () => {
     setIsLoading(true);
@@ -100,6 +101,19 @@ export const SalesAnalyzer: React.FC = () => {
     }
     return list.sort((a, b) => b.quantitySold - a.quantitySold);
   }, [analytics, itemSortKey]);
+
+  const sortedCategorySales = React.useMemo(() => {
+    if (!analytics || !analytics.categorySales) return [];
+    const list = [...analytics.categorySales];
+    if (catSortKey === 'quantity') {
+      return list.sort((a, b) => b.quantitySold - a.quantitySold);
+    }
+    if (catSortKey === 'name') {
+      return list.sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+    }
+    return list.sort((a, b) => b.totalValue - a.totalValue);
+  }, [analytics, catSortKey]);
+
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -411,26 +425,93 @@ export const SalesAnalyzer: React.FC = () => {
 
             {/* CATEGORY PERFORMANCE */}
             <div className="p-6 rounded-3xl bg-white dark:bg-namaha-green-deep border border-emerald-950/10 dark:border-namaha-gold/20 shadow-xl space-y-4">
-              <div className="border-b border-gray-100 dark:border-white/10 pb-3">
-                <h3 className="text-lg font-serif font-bold text-namaha-green-deep dark:text-white">
-                  CATEGORY PERFORMANCE
-                </h3>
-                <span className="text-xs text-slate-500 dark:text-gray-400">Sales breakdown by menu categories</span>
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/10 pb-3">
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-namaha-green-deep dark:text-white">
+                    CATEGORY PERFORMANCE
+                  </h3>
+                  <span className="text-xs text-slate-500 dark:text-gray-400">Sales revenue & volume breakdown by category</span>
+                </div>
+                
+                <div className="flex items-center gap-1 text-xs">
+                  <button
+                    onClick={() => setCatSortKey('value')}
+                    className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                      catSortKey === 'value' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'
+                    }`}
+                    title="Sort by revenue (₹)"
+                  >
+                    Value ₹
+                  </button>
+                  <button
+                    onClick={() => setCatSortKey('quantity')}
+                    className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                      catSortKey === 'quantity' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'
+                    }`}
+                    title="Sort by units sold"
+                  >
+                    Qty
+                  </button>
+                  <button
+                    onClick={() => setCatSortKey('name')}
+                    className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                      catSortKey === 'name' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'
+                    }`}
+                    title="Sort alphabetically"
+                  >
+                    A–Z
+                  </button>
+                </div>
               </div>
 
-              {analytics.categorySales && analytics.categorySales.length > 0 ? (
-                <div className="space-y-3">
-                  {analytics.categorySales.map((cat, idx) => {
-                    const totalCatVal = analytics.categorySales.reduce((s, c) => s + c.totalValue, 0) || 1;
-                    const pct = Math.round((cat.totalValue / totalCatVal) * 100);
+              {sortedCategorySales.length > 0 ? (
+                <div className="space-y-3.5">
+                  {sortedCategorySales.map((cat, idx) => {
+                    const totalCatVal = analytics.totalOrderValue || 1;
+                    const pct = cat.percentageOfTotalSales !== undefined
+                      ? cat.percentageOfTotalSales
+                      : Math.round((cat.totalValue / totalCatVal) * 100);
+
                     return (
-                      <div key={idx} className="p-3 rounded-2xl bg-slate-50 dark:bg-namaha-green-dark/50 space-y-1.5">
+                      <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-namaha-green-dark/50 space-y-2 border border-black/5 dark:border-white/5">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-800 dark:text-white">{cat.categoryName}</span>
-                          <span className="font-extrabold text-namaha-gold">₹{cat.totalValue.toFixed(0)} ({pct}%)</span>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0" />
+                            <span className="font-extrabold text-slate-800 dark:text-white text-sm">{cat.categoryName}</span>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="font-serif font-extrabold text-namaha-gold text-sm block">
+                              ₹{cat.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            </span>
+                            <span className="text-[10px] text-amber-500 font-bold">
+                              {pct}% of sales
+                            </span>
+                          </div>
                         </div>
+
+                        {/* Progress Bar */}
                         <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
-                          <div style={{ width: `${pct}%` }} className="h-full bg-amber-500 rounded-full" />
+                          <div
+                            style={{ width: `${Math.max(pct, 3)}%` }}
+                            className="h-full bg-gradient-to-r from-amber-500 via-namaha-gold to-amber-400 rounded-full transition-all duration-500"
+                          />
+                        </div>
+
+                        {/* Category Stats Subline */}
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-gray-400 font-medium pt-0.5">
+                          <div className="flex items-center gap-3">
+                            <span><strong>{cat.quantitySold}</strong> units sold</span>
+                            {cat.uniqueItemCount && cat.uniqueItemCount > 0 ? (
+                              <span>• <strong>{cat.uniqueItemCount}</strong> items</span>
+                            ) : null}
+                          </div>
+
+                          {cat.topItemName && (
+                            <span className="text-emerald-400 font-semibold truncate max-w-[160px]" title={`Top Item: ${cat.topItemName} (${cat.topItemQty} sold)`}>
+                              ⭐ Top: {cat.topItemName} ({cat.topItemQty})
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

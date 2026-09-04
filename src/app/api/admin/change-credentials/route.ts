@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseServer';
 import {
   createAdminSessionToken,
   setDynamicAdminCredentials,
@@ -17,6 +18,20 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Unauthorized: Valid Admin authentication required' },
         { status: 401 }
       );
+    }
+
+    // Load existing custom credentials from Supabase if present
+    try {
+      const { data: dbInfo } = await supabaseAdmin
+        .from('restaurant_info')
+        .select('admin_username, admin_passcode')
+        .limit(1)
+        .single();
+      if (dbInfo && dbInfo.admin_username && dbInfo.admin_passcode) {
+        setDynamicAdminCredentials(dbInfo.admin_username, dbInfo.admin_passcode);
+      }
+    } catch (e) {
+      // Fallback
     }
 
     const body = await request.json();
@@ -59,8 +74,16 @@ export async function POST(request: NextRequest) {
     const cleanedUsername = newUsername.trim();
     const cleanedPasscode = newPasscode.trim();
 
-    // 4. Update dynamic credentials on server
+    // 4. Update dynamic credentials on server memory & Supabase DB
     setDynamicAdminCredentials(cleanedUsername, cleanedPasscode);
+
+    try {
+      await supabaseAdmin
+        .from('restaurant_info')
+        .upsert({ id: 1, admin_username: cleanedUsername, admin_passcode: cleanedPasscode }, { onConflict: 'id' });
+    } catch (dbErr) {
+      console.warn('Could not persist admin credentials to restaurant_info column:', dbErr);
+    }
 
     // 5. Issue new session token
     const token = createAdminSessionToken();

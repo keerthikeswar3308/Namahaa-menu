@@ -28,7 +28,9 @@ function getStoredOrders(): Order[] {
   if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(ORDERS_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
     console.error('Error reading stored orders:', err);
     return [];
@@ -212,9 +214,7 @@ export class OrderStore {
   static async fetchCustomerOrders(tableNumber?: number | null, sessionId?: string): Promise<Order[]> {
     if (!sessionId) return getStoredOrders();
     try {
-      const url = tableNumber
-        ? `/api/orders/list?tableNumber=${tableNumber}&sessionId=${sessionId}&t=${Date.now()}`
-        : `/api/orders/list?sessionId=${sessionId}&t=${Date.now()}`;
+      const url = `/api/orders/list?sessionId=${sessionId}&t=${Date.now()}`;
       const res = await fetch(url, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
@@ -374,6 +374,31 @@ export class OrderStore {
       return true;
     }
   }
+
+  static async executeAdminOrderAction(payload: {
+    action: 'apply_discount' | 'merge_orders' | 'change_table' | 'add_items' | 'update_notes' | 'cancel_order';
+    orderId: string;
+    [key: string]: any;
+  }): Promise<{ success: boolean; order?: Order; primaryOrder?: Order; error?: string; message?: string }> {
+    try {
+      const res = await fetch('/api/admin/orders/actions', {
+        method: 'POST',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        notifyOrdersUpdated();
+        return data;
+      }
+      return { success: false, error: data.error || 'Failed to execute order action' };
+    } catch (err: any) {
+      console.error('executeAdminOrderAction exception:', err);
+      return { success: false, error: err.message || 'Network error executing action' };
+    }
+  }
+
 
   static subscribeToLiveOrders(onOrderUpdate: (payload?: any) => void): () => void {
     if (typeof window === 'undefined') return () => {};

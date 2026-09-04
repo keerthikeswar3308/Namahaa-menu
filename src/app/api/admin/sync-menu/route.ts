@@ -24,11 +24,31 @@ export async function POST(request: NextRequest) {
       categories,
       restaurantInfo,
       gallery,
+      tableTokens,
+      action,
       mode = 'merge',
       deleteItemId,
       deleteCategoryId,
       deleteGalleryId,
     } = body;
+
+    // Handle Table Tokens Update
+    if (tableTokens && (action === 'update_table_tokens' || mode)) {
+      const tableRows = Object.entries(tableTokens).map(([num, tok]) => ({
+        table_number: parseInt(num, 10),
+        qr_token: String(tok),
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: tblErr } = await supabaseAdmin
+        .from('restaurant_tables')
+        .upsert(tableRows, { onConflict: 'table_number' });
+
+      if (tblErr) {
+        console.error('Supabase restaurant_tables sync error:', tblErr);
+      }
+    }
 
     // 2. Handle Individual Record Deletions
     if (deleteItemId) {

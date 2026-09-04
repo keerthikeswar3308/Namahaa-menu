@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { NamahaLogo } from './NamahaLogo';
 import { Utensils, Search, Menu as MenuIcon, X, Sun, Moon, Heart, ShoppingCart, ShoppingBag, ChevronDown, ClipboardList } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
+import { OrderStore } from '@/lib/orderStore';
+import { getRestaurantBusinessDateStr } from '@/lib/businessDay';
 import { useTheme } from '@/lib/theme';
 import { useCart } from '@/lib/cartContext';
 
@@ -25,6 +27,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { theme, toggleTheme } = useTheme();
   const { wishlist, openWishlist, totalCount, openCart, openOrders } = useCart();
 
+  const [todayOrdersCount, setTodayOrdersCount] = useState(0);
+
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 20) {
@@ -39,8 +43,39 @@ export const Navbar: React.FC<NavbarProps> = ({
     const info = NamahaStore.getRestaurantInfo();
     if (info.name) setRestaurantName(info.name);
 
-    return () => window.removeEventListener('scroll', handleScroll);
+    const updateOrdersBadge = () => {
+      const orders = OrderStore.getOrders() || [];
+      const todayStr = getRestaurantBusinessDateStr();
+      const activeTodayCount = orders.filter(
+        (o) => o && o.createdAt && getRestaurantBusinessDateStr(o.createdAt) === todayStr && o.orderStatus !== 'cancelled'
+      ).length;
+      setTodayOrdersCount(activeTodayCount);
+    };
+
+    updateOrdersBadge();
+    window.addEventListener('namahaa_orders_updated', updateOrdersBadge);
+    window.addEventListener('storage', updateOrdersBadge);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('namahaa_orders_updated', updateOrdersBadge);
+      window.removeEventListener('storage', updateOrdersBadge);
+    };
   }, []);
+
+  const scrollToSection = (id: string) => {
+    setMobileMenuOpen(false);
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        const element = document.getElementById(id);
+        if (element) {
+          const yOffset = -80;
+          const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+          window.scrollTo({ top: y, behavior: 'smooth' });
+        }
+      }
+    }, 50);
+  };
 
   return (
     <header
@@ -58,52 +93,46 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="md:hidden flex flex-col py-1">
           {/* ROW 1: Logo + Large Brand Title (Left) & Hamburger Menu (Right) */}
           <div className="flex items-center justify-between py-1.5">
-            <Link href="/" className="flex items-center gap-3 group">
-              <NamahaLogo variant="circle" size="sm" className="w-10 h-10 shadow-sm flex-shrink-0" />
+            <Link href="/" className="flex items-center gap-2.5">
+              <NamahaLogo variant="circle" size="sm" />
               <div className="flex flex-col">
-                <span className="text-[19px] sm:text-[21px] leading-tight font-serif font-bold text-[#F39C12] tracking-wide">
+                <span className="text-base font-serif font-extrabold text-[#9A3412] dark:text-namaha-gold tracking-wide leading-tight">
                   {restaurantName}
                 </span>
-                <span className="text-[10px] uppercase text-[#0B3D2E] dark:text-emerald-300 tracking-wider font-sans font-extrabold mt-0.5">
-                  PURE VEG • DIGITAL QR MENU
+                <span className="text-[9px] uppercase text-[#065F46] dark:text-emerald-300 font-sans font-black tracking-wider leading-none">
+                  Pure Veg • Authentic Tiffins
                 </span>
               </div>
             </Link>
 
-            {/* Hamburger Menu Button */}
+            {/* Hamburger Mobile Menu Toggle Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-2xl bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#0B3D2E] dark:text-white shadow-xs active:scale-95 transition flex items-center justify-center"
-              aria-label="Toggle Navigation Menu"
+              className="p-2 rounded-xl bg-[#FFF4E5] dark:bg-white/10 text-[#D97706] dark:text-namaha-gold border border-[#F9E7C1] dark:border-white/15 shadow-xs active:scale-95 transition"
+              aria-label="Toggle Mobile Navigation Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <MenuIcon className="w-5 h-5" />}
             </button>
           </div>
 
-          {/* Clean Subtle Divider */}
-          <div className="border-t border-[#F9E7C1]/80 dark:border-white/10 my-1" />
-
-          {/* ROW 2: Table Selector (Left) & Quick Action Icons (Right) */}
-          <div className="flex items-center justify-between py-1">
-            {/* Left: Dynamic Table Selector Pill */}
+          {/* ROW 2: Mobile Action Bar Icons (Cart, Wishlist, Your Orders, Theme) */}
+          <div className="flex items-center justify-between pt-1 pb-1.5 border-t border-[#F9E7C1]/60 dark:border-white/10">
+            {/* Left: Table Selection Quick Button */}
             <button
+              type="button"
               onClick={onOpenTableSelector}
-              data-open-table-modal="true"
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#FFF4E5] dark:bg-amber-950/40 border border-[#F9E7C1] dark:border-amber-500/40 text-[#D97706] dark:text-amber-300 text-sm font-bold active:scale-95 transition-all shadow-xs"
-              title="Click to change table"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF4E5] dark:bg-namaha-gold/20 border border-[#F9E7C1] dark:border-namaha-gold/40 text-[#B45309] dark:text-namaha-gold font-bold text-xs shadow-xs hover:scale-102 active:scale-95 transition"
             >
-              <span>{selectedTable ? `Table No - ${selectedTable}` : 'Table No - Select'}</span>
-              <ChevronDown className="w-4 h-4 text-[#D97706] dark:text-amber-300 stroke-[2.5]" />
+              <Utensils className="w-3.5 h-3.5" />
+              <span>{selectedTable ? `Table #${selectedTable}` : 'Select Table'}</span>
             </button>
 
-            {/* Right: 3 Quick Action Icons (Cart, Wishlist, Theme) */}
+            {/* Right Quick Action Round Icons */}
             <div className="flex items-center gap-2">
-              {/* 1. Cart Icon */}
               <button
                 onClick={openCart}
                 className="relative w-9 h-9 rounded-full flex items-center justify-center bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#D97706] dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition active:scale-95 shadow-xs"
                 aria-label="View Shopping Cart"
-                title="Shopping Cart"
               >
                 <ShoppingCart className="w-4 h-4" />
                 {totalCount > 0 && (
@@ -113,37 +142,31 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
 
-              {/* 2. Wishlist Icon */}
               <button
                 onClick={openWishlist}
                 className="relative w-9 h-9 rounded-full flex items-center justify-center bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#D97706] dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition active:scale-95 shadow-xs"
                 aria-label="Saved Wishlist"
-                title="Saved Wishlist"
               >
                 <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'fill-red-500 text-red-500' : ''}`} />
-                {wishlist.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white font-extrabold text-[9px] flex items-center justify-center shadow-xs leading-none">
-                    {wishlist.length}
-                  </span>
-                )}
               </button>
 
-              {/* 3. Your Orders Icon */}
               <button
                 onClick={openOrders}
                 className="relative w-9 h-9 rounded-full flex items-center justify-center bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#D97706] dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition active:scale-95 shadow-xs"
                 aria-label="View Placed Orders"
-                title="Your Orders"
               >
                 <ClipboardList className="w-4 h-4" />
+                {todayOrdersCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-namaha-green-deep font-extrabold text-[9px] flex items-center justify-center shadow-xs leading-none">
+                    {todayOrdersCount}
+                  </span>
+                )}
               </button>
 
-              {/* 4. Theme / Brightness Icon (Moon/Sun) */}
               <button
                 onClick={toggleTheme}
                 className="w-9 h-9 rounded-full flex items-center justify-center bg-[#FFF4E5] dark:bg-white/10 border border-[#F9E7C1] dark:border-white/15 text-[#D97706] dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-white/20 transition active:scale-95 shadow-xs"
                 aria-label="Toggle Bright / Dark Mode"
-                title={theme === 'light' ? 'Switch to Dark Theme' : 'Switch to Bright Theme'}
               >
                 {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
               </button>
@@ -172,16 +195,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Desktop Right Actions */}
           <div className="hidden md:flex items-center gap-3.5">
             
-            {/* Table Badge */}
+            {/* Table Selection Button */}
             <button
+              type="button"
               onClick={onOpenTableSelector}
-              data-open-table-modal="true"
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-namaha-gold/15 dark:bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold hover:bg-namaha-gold hover:text-namaha-green-deep transition-all duration-300 shadow-sm"
-              title="Click to change your table"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-namaha-gold/15 dark:bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold shadow-sm hover:scale-102 transition"
             >
               <Utensils className="w-3.5 h-3.5" />
               <span>{selectedTable ? `Table #${selectedTable}` : 'Select Table'}</span>
-              <span className="text-[10px] bg-namaha-gold/30 px-1.5 py-0.5 rounded text-namaha-green-deep dark:text-white font-bold">Change</span>
             </button>
 
             {/* Top Cart Button */}
@@ -213,6 +234,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <ClipboardList className="w-4 h-4 text-namaha-gold-warm dark:text-namaha-gold" />
               <span>Your Orders</span>
+              {todayOrdersCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-namaha-green-deep font-extrabold text-[10px]">
+                  {todayOrdersCount}
+                </span>
+              )}
             </button>
 
             {/* Wishlist Button */}
@@ -243,21 +269,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Nav Links */}
             <nav className="flex items-center gap-4 text-sm font-bold text-slate-700 dark:text-gray-200">
-              <Link href="#menu" className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
+              <button type="button" onClick={() => scrollToSection('menu')} className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
                 Menu
-              </Link>
-              <Link href="#specials" className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
+              </button>
+              <button type="button" onClick={() => scrollToSection('specials')} className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
                 Specials
-              </Link>
-              <Link href="#about" className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
+              </button>
+              <button type="button" onClick={() => scrollToSection('about')} className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
                 About
-              </Link>
-              <Link href="#gallery" className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
+              </button>
+              <button type="button" onClick={() => scrollToSection('gallery')} className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
                 Gallery
-              </Link>
-              <Link href="#contact" className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
+              </button>
+              <button type="button" onClick={() => scrollToSection('contact')} className="hover:text-namaha-gold-warm dark:hover:text-namaha-gold transition-colors">
                 Location
-              </Link>
+              </button>
             </nav>
 
             {/* Theme Toggle Button */}
@@ -291,6 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <nav className="flex flex-col gap-2.5 text-sm font-bold text-slate-800 dark:text-gray-200 pt-2 border-t border-slate-200 dark:border-white/10">
               <button
+                type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
                   openCart();
@@ -302,6 +329,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
                   openWishlist();
@@ -312,41 +340,41 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="font-sans font-bold text-red-400">({wishlist.length})</span>
               </button>
 
-              <Link
-                href="#menu"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm"
+              <button
+                type="button"
+                onClick={() => scrollToSection('menu')}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm text-left"
               >
                 📜 Full Menu
-              </Link>
-              <Link
-                href="#specials"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm"
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('specials')}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm text-left"
               >
                 ⭐ Chef Specials
-              </Link>
-              <Link
-                href="#about"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm"
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('about')}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm text-left"
               >
                 🏛️ Our Story
-              </Link>
-              <Link
-                href="#gallery"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm"
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('gallery')}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm text-left"
               >
                 🖼️ Gallery
-              </Link>
-              <Link
-                href="#contact"
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm"
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('contact')}
+                className="py-1.5 px-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 hover:text-namaha-gold-warm text-left"
               >
                 📍 Hours & Location
-              </Link>
+              </button>
             </nav>
           </div>
         )}
@@ -354,4 +382,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
-

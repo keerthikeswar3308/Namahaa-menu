@@ -19,6 +19,8 @@ import {
   RefreshCw,
   QrCode,
   Upload,
+  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 
 interface SettingsManagementProps {
@@ -43,6 +45,68 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
   const [credSaving, setCredSaving] = useState(false);
   const [credSuccess, setCredSuccess] = useState<string | null>(null);
   const [credError, setCredError] = useState<string | null>(null);
+
+  // Database Reset State
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetDatabase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    setResetSuccess(null);
+
+    if (!resetPasswordInput.trim()) {
+      setResetError('Please enter your admin password to confirm database reset.');
+      return;
+    }
+
+    setIsResetting(true);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (typeof window !== 'undefined') {
+        const token = sessionStorage.getItem('namahaa_admin_token');
+        if (token) headers['x-admin-token'] = token;
+        const currentPass = localStorage.getItem('namahaa_admin_auth_code') || resetPasswordInput.trim();
+        headers['x-admin-passcode'] = currentPass;
+      }
+
+      const res = await fetch('/api/admin/orders/reset', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ passcode: resetPasswordInput.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // Clear local storage customer & order cache
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('namahaa_customer_session_v1');
+          localStorage.removeItem('namahaa_cart_v1');
+          localStorage.removeItem('namahaa_active_orders_v1');
+          localStorage.removeItem('namahaa_table_v1');
+          localStorage.setItem('namahaa_client_reset_version', `v3_clean_reset_${Date.now()}`);
+        }
+        setResetSuccess(data.message || 'Database reset successfully! All customer & admin order data cleared.');
+        setShowResetModal(false);
+        setResetPasswordInput('');
+        setTimeout(() => setResetSuccess(null), 8000);
+      } else {
+        setResetError(data.error || 'Incorrect admin password or failed to reset database.');
+      }
+    } catch (err: any) {
+      console.error('Reset database error:', err);
+      setResetError(err.message || 'Network error while resetting database');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,8 +154,7 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
       if (typeof window !== 'undefined') {
         const token = sessionStorage.getItem('namahaa_admin_token');
         if (token) headers['x-admin-token'] = token;
-        const currentPass = localStorage.getItem('namahaa_admin_auth_code') || credCurrentPasscode.trim();
-        headers['x-admin-passcode'] = currentPass;
+        headers['x-admin-passcode'] = credCurrentPasscode.trim();
       }
 
       const res = await fetch('/api/admin/change-credentials', {
@@ -274,6 +337,122 @@ export const SettingsManagement: React.FC<SettingsManagementProps> = ({ info, on
           </div>
         </form>
       </div>
+
+      {/* ========================================================= */}
+      {/* RESET DATABASE (CUSTOMER + ADMIN ORDER DATA)               */}
+      {/* ========================================================= */}
+      <div className="p-6 rounded-3xl bg-slate-900 border border-rose-500/40 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between border-b border-rose-500/20 pb-3">
+          <h3 className="text-lg font-serif font-bold text-rose-400 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-rose-500" /> Reset Database (Customer + Admin Orders)
+          </h3>
+          <span className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 font-extrabold text-[10px] tracking-wider uppercase border border-rose-500/30">
+            DANGER ZONE
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-300 leading-relaxed">
+          Clear all active and historical customer + admin order records to start with a 100% clean data state.
+          <strong className="text-white block mt-1">
+            Note: Your menu items (101 items), categories (13 categories), gallery images, and restaurant settings are 100% safe and will NOT be deleted.
+          </strong>
+        </p>
+
+        {resetSuccess && (
+          <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
+            <span>{resetSuccess}</span>
+          </div>
+        )}
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setResetError(null);
+              setResetPasswordInput('');
+              setShowResetModal(true);
+            }}
+            className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-lg flex items-center gap-2 active:scale-95 transition"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>RESET DATABASE ORDER DATA</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* RESET DATABASE PASSWORD CONFIRMATION MODAL               */}
+      {/* ========================================================= */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleResetDatabase}
+            className="bg-slate-900 border border-rose-500/50 rounded-3xl p-6 max-w-md w-full text-white shadow-2xl space-y-5 animate-scale-up"
+          >
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-500">
+                <AlertTriangle className="w-7 h-7 animate-bounce" />
+              </div>
+              <h3 className="text-xl font-serif font-bold text-white">Confirm Database Reset?</h3>
+              <p className="text-xs text-gray-300 leading-relaxed">
+                Are you sure you want to reset all active & past orders? This action will permanently erase customer & admin order data. Your menu and categories will stay intact.
+              </p>
+            </div>
+
+            {resetError && (
+              <div className="p-3 rounded-xl bg-rose-950 border border-rose-500 text-rose-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                <span>{resetError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-300 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-namaha-gold" />
+                <span>Enter Admin Password to Confirm *</span>
+              </label>
+              <input
+                type="password"
+                value={resetPasswordInput}
+                onChange={(e) => setResetPasswordInput(e.target.value)}
+                placeholder="Enter current admin password..."
+                required
+                autoFocus
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-sm text-white placeholder-gray-400 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 transition"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetPasswordInput('');
+                  setResetError(null);
+                }}
+                disabled={isResetting}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-300 text-xs font-bold transition disabled:opacity-50"
+              >
+                CANCEL
+              </button>
+
+              <button
+                type="submit"
+                disabled={isResetting}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-lg flex items-center gap-2 disabled:opacity-50 transition"
+              >
+                {isResetting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>{isResetting ? 'Resetting Database...' : 'CONFIRM RESET'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {saveError && (
         <div className="p-4 rounded-2xl bg-red-950 border border-red-500 text-red-300 text-sm font-bold flex items-center gap-2 animate-fade-in">

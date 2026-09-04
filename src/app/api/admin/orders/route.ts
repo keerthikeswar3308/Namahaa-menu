@@ -39,18 +39,29 @@ function formatDisplayDate(dateStr: string): string {
 
 // Helper to map DB row to Order object
 function mapDbOrder(o: any) {
+  const items = Array.isArray(o.items) ? o.items : [];
+  const rawSubtotal = Number(o.subtotal_amount || 0);
+  const calculatedSubtotal = items.reduce((s: number, item: any) => s + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+  const subtotalAmount = rawSubtotal > 0 ? rawSubtotal : calculatedSubtotal;
+
   return {
     id: o.id,
     orderNumber: o.order_number || o.orderNumber || `#ORD-${o.id.slice(-6)}`,
     tableNumber: Number(o.table_number || o.tableNumber || 1),
-    items: Array.isArray(o.items) ? o.items : [],
-    totalAmount: Number(o.total_amount || o.totalAmount || 0),
+    items,
+    subtotalAmount,
+    discountType: o.discount_type || 'none',
+    discountValue: Number(o.discount_value || 0),
+    discountAmount: Number(o.discount_amount || 0),
+    totalAmount: Number(o.total_amount || o.totalAmount || subtotalAmount),
     orderStatus: o.order_status || 'pending',
     customerName: o.customer_name || '',
     customerPhone: o.customer_phone || '',
     notes: o.notes || '',
     sessionId: o.session_id || '',
     idempotencyKey: o.idempotency_key || '',
+    mergedIntoOrderId: o.merged_into_order_id || undefined,
+    mergedFromOrderNumbers: Array.isArray(o.merged_from_order_numbers) ? o.merged_from_order_numbers : undefined,
     createdAt: o.created_at || new Date().toISOString(),
     updatedAt: o.updated_at || new Date().toISOString(),
   };
@@ -99,7 +110,9 @@ export async function GET(request: NextRequest) {
       let completedCount = 0;
       let cancelledCount = 0;
 
-      orders.forEach((o) => {
+      const nonMergedOrders = orders.filter((o) => o.orderStatus !== 'merged');
+
+      nonMergedOrders.forEach((o) => {
         if (o.orderStatus !== 'cancelled') {
           totalOrderValue += o.totalAmount;
           itemCount += o.items.reduce((s: number, i: any) => s + (Number(i.quantity) || 1), 0);
@@ -116,10 +129,10 @@ export async function GET(request: NextRequest) {
         summary: {
           date: targetDate,
           formattedDate: formatDisplayDate(targetDate),
-          orderCount: orders.length,
+          orderCount: nonMergedOrders.length,
           itemCount,
           totalOrderValue,
-          averageOrderValue: orders.length > 0 ? totalOrderValue / orders.length : 0,
+          averageOrderValue: nonMergedOrders.length > 0 ? totalOrderValue / nonMergedOrders.length : 0,
           activeCount,
           completedCount,
           cancelledCount,
@@ -127,6 +140,7 @@ export async function GET(request: NextRequest) {
         orders,
       });
     }
+
 
     // -------------------------------------------------------------
     // MODE 2: HISTORY LIST (Compact Past Days Aggregate Summary)
@@ -163,6 +177,9 @@ export async function GET(request: NextRequest) {
       }>();
 
       (dbOrders || []).forEach((row: any) => {
+        const status = row.order_status || 'pending';
+        if (status === 'merged') return; // Exclude merged secondary orders from history summaries
+
         const istDateStr = getISTDateString(new Date(row.created_at));
         if (!dateGroupMap.has(istDateStr)) {
           dateGroupMap.set(istDateStr, {
@@ -179,7 +196,6 @@ export async function GET(request: NextRequest) {
 
         const group = dateGroupMap.get(istDateStr)!;
         group.orderCount++;
-        const status = row.order_status || 'pending';
         const total = Number(row.total_amount) || 0;
 
         if (status !== 'cancelled') {
@@ -192,6 +208,7 @@ export async function GET(request: NextRequest) {
         else if (status === 'cancelled') group.cancelledCount++;
         else group.activeCount++;
       });
+
 
       const historyList = Array.from(dateGroupMap.values()).map((g) => ({
         ...g,
@@ -278,8 +295,9 @@ export async function GET(request: NextRequest) {
         .gte('created_at', prevStartISO)
         .lte('created_at', prevEndISO);
 
-      const currOrders = (currDbOrders || []).map(mapDbOrder);
-      const prevOrders = (prevDbOrders || []).map(mapDbOrder);
+      const currOrders = (currDbOrders || []).map(mapDbOrder).filter((o) => o.orderStatus !== 'merged');
+      const prevOrders = (prevDbOrders || []).map(mapDbOrder).filter((o) => o.orderStatus !== 'merged');
+
 
       // Calculate Current KPIs
       let totalOrderValue = 0;
@@ -287,7 +305,12 @@ export async function GET(request: NextRequest) {
       let totalItemsSold = 0;
 
       const itemSalesMap = new Map<string, { name: string; quantitySold: number; totalValue: number }>();
-      const categorySalesMap = new Map<string, { categoryName: string; totalValue: number; quantitySold: number }>();
+      const categorySalesMap = new Map<string, {
+        categoryName: string;
+        totalValue: number;
+        quantitySold: number;
+        itemsMap: Map<string, { qty: number; value: number }>;
+      }>();
       const hourlySalesMap = new Map<number, { hour: number; hourLabel: string; orderCount: number; totalValue: number }>();
       const dailyTrendMap = new Map<string, { date: string; formattedDate: string; orderCount: number; totalValue: number }>();
       const tableSalesMap = new Map<number, { tableNumber: number; orderCount: number; totalValue: number }>();
@@ -351,13 +374,30 @@ export async function GET(request: NextRequest) {
           itemStat.quantitySold += qty;
           itemStat.totalValue += val;
 
-          const catName = item.categoryName || 'Tiffins';
+          // Normalize category name
+          let catName = (item.categoryName || item.category_name || item.category || '').trim();
+          if (!catName) {
+            catName = 'General Menu';
+          }
+
           if (!categorySalesMap.has(catName)) {
-            categorySalesMap.set(catName, { categoryName: catName, totalValue: 0, quantitySold: 0 });
+            categorySalesMap.set(catName, {
+              categoryName: catName,
+              totalValue: 0,
+              quantitySold: 0,
+              itemsMap: new Map<string, { qty: number; value: number }>(),
+            });
           }
           const catStat = categorySalesMap.get(catName)!;
           catStat.quantitySold += qty;
           catStat.totalValue += val;
+
+          if (!catStat.itemsMap.has(itemName)) {
+            catStat.itemsMap.set(itemName, { qty: 0, value: 0 });
+          }
+          const catItem = catStat.itemsMap.get(itemName)!;
+          catItem.qty += qty;
+          catItem.value += val;
         });
       });
 
@@ -391,9 +431,33 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.quantitySold - a.quantitySold)
         .slice(0, 10);
 
-      // Category Sales (Sort by Value)
-      const categorySales = Array.from(categorySalesMap.values())
-        .sort((a, b) => b.totalValue - a.totalValue);
+      // Category Sales Breakdown
+      const categorySales = Array.from(categorySalesMap.values()).map((cat) => {
+        let topItemName = '';
+        let topItemQty = 0;
+
+        cat.itemsMap.forEach((data, name) => {
+          if (data.qty > topItemQty) {
+            topItemQty = data.qty;
+            topItemName = name;
+          }
+        });
+
+        const percentageOfTotalSales = totalOrderValue > 0
+          ? Math.round((cat.totalValue / totalOrderValue) * 1000) / 10
+          : 0;
+
+        return {
+          categoryName: cat.categoryName,
+          totalValue: cat.totalValue,
+          quantitySold: cat.quantitySold,
+          uniqueItemCount: cat.itemsMap.size,
+          topItemName,
+          topItemQty,
+          percentageOfTotalSales,
+        };
+      }).sort((a, b) => b.totalValue - a.totalValue);
+
 
       // Hourly List
       const hourlySales = Array.from(hourlySalesMap.values());

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseServer';
 import {
   createAdminSessionToken,
+  setDynamicAdminCredentials,
   verifyAdminCredentials,
   verifyAdminPasscode,
   verifyAdminUsername,
@@ -19,6 +21,20 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Passcode is required' },
         { status: 400 }
       );
+    }
+
+    // Fetch custom admin credentials saved in Supabase restaurant_info
+    try {
+      const { data: dbInfo } = await supabaseAdmin
+        .from('restaurant_info')
+        .select('admin_username, admin_passcode')
+        .limit(1)
+        .single();
+      if (dbInfo && dbInfo.admin_username && dbInfo.admin_passcode) {
+        setDynamicAdminCredentials(dbInfo.admin_username, dbInfo.admin_passcode);
+      }
+    } catch (e) {
+      // Ignore fallback if table doesn't have custom columns yet
     }
 
     // If username is provided, verify both username and passcode

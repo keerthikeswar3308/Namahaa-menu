@@ -59,9 +59,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
         if (Array.isArray(parsed)) {
           const restored: CartItem[] = [];
           parsed.forEach((entry) => {
-            const found = allMenuItems.find((i) => i.id === entry.id);
-            if (found && entry.quantity > 0) {
-              restored.push({ item: found, quantity: entry.quantity });
+            if (!entry || !entry.id) return;
+            const found = (allMenuItems || []).find((i) => i && i.id === entry.id);
+            if (found && found.id && Number(entry.quantity) > 0) {
+              restored.push({ item: found, quantity: Number(entry.quantity) });
             }
           });
           setCart(restored);
@@ -74,8 +75,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
         if (Array.isArray(parsedIds)) {
           const restoredWish: MenuItem[] = [];
           parsedIds.forEach((id) => {
-            const found = allMenuItems.find((i) => i.id === id);
-            if (found) restoredWish.push(found);
+            if (!id) return;
+            const found = (allMenuItems || []).find((i) => i && i.id === id);
+            if (found && found.id) restoredWish.push(found);
           });
           setWishlist(restoredWish);
         }
@@ -89,7 +91,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
   useEffect(() => {
     if (!mounted) return;
     try {
-      const lightweight = cart.map((c) => ({ id: c.item.id, quantity: c.quantity }));
+      const lightweight = (cart || [])
+        .filter((c) => c && c.item && c.item.id)
+        .map((c) => ({ id: c.item.id, quantity: c.quantity || 1 }));
       localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(lightweight));
     } catch (err) {
       console.warn('Error saving cart:', err);
@@ -99,7 +103,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
   useEffect(() => {
     if (!mounted) return;
     try {
-      const ids = wishlist.map((w) => w.id);
+      const ids = (wishlist || [])
+        .filter((w) => w && w.id)
+        .map((w) => w.id);
       localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify(ids));
     } catch (err) {
       console.warn('Error saving wishlist:', err);
@@ -107,40 +113,45 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
   }, [wishlist, mounted]);
 
   const addToCart = (item: MenuItem) => {
-    if (!item.isAvailable) return;
+    if (!item || !item.id || !item.isAvailable) return;
     setCart((prev) => {
-      const index = prev.findIndex((c) => c.item.id === item.id);
+      const validPrev = (prev || []).filter((c) => c && c.item && c.item.id);
+      const index = validPrev.findIndex((c) => c.item.id === item.id);
       if (index > -1) {
-        const updated = [...prev];
+        const updated = [...validPrev];
         updated[index] = { ...updated[index], quantity: updated[index].quantity + 1 };
         return updated;
       }
-      return [...prev, { item, quantity: 1 }];
+      return [...validPrev, { item, quantity: 1 }];
     });
   };
 
   const removeFromCart = (itemId: string) => {
+    if (!itemId) return;
     setCart((prev) => {
-      const index = prev.findIndex((c) => c.item.id === itemId);
-      if (index === -1) return prev;
-      if (prev[index].quantity > 1) {
-        const updated = [...prev];
+      const validPrev = (prev || []).filter((c) => c && c.item && c.item.id);
+      const index = validPrev.findIndex((c) => c.item.id === itemId);
+      if (index === -1) return validPrev;
+      if (validPrev[index].quantity > 1) {
+        const updated = [...validPrev];
         updated[index] = { ...updated[index], quantity: updated[index].quantity - 1 };
         return updated;
       }
-      return prev.filter((c) => c.item.id !== itemId);
+      return validPrev.filter((c) => c.item.id !== itemId);
     });
   };
 
   const updateQuantity = (itemId: string, quantity: number) => {
+    if (!itemId) return;
     if (quantity <= 0) {
-      setCart((prev) => prev.filter((c) => c.item.id !== itemId));
+      setCart((prev) => (prev || []).filter((c) => c && c.item && c.item.id !== itemId));
       return;
     }
     setCart((prev) => {
-      const index = prev.findIndex((c) => c.item.id === itemId);
-      if (index === -1) return prev;
-      const updated = [...prev];
+      const validPrev = (prev || []).filter((c) => c && c.item && c.item.id);
+      const index = validPrev.findIndex((c) => c.item.id === itemId);
+      if (index === -1) return validPrev;
+      const updated = [...validPrev];
       updated[index] = { ...updated[index], quantity };
       return updated;
     });
@@ -170,8 +181,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
     return wishlist.some((w) => w.id === itemId);
   };
 
-  const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = cart.reduce((sum, item) => sum + item.quantity * Number(item.item.price), 0);
+  const totalCount = (cart || []).reduce((sum, item) => sum + (item?.quantity || 0), 0);
+  const totalPrice = (cart || []).reduce((sum, item) => sum + (item?.quantity || 0) * Number(item?.item?.price || 0), 0);
 
   return (
     <CartContext.Provider

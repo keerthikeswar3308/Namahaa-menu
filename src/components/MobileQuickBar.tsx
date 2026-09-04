@@ -41,12 +41,12 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
         
         {/* 1. Table Badge Action */}
         <button
+          type="button"
           onClick={onOpenTableSelector}
-          data-open-table-modal="true"
           className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-full bg-amber-500/15 dark:bg-namaha-gold/20 text-amber-800 dark:text-namaha-gold font-bold text-[11px] active:scale-95 transition"
         >
           <Utensils className="w-4 h-4 text-amber-600 dark:text-namaha-gold" />
-          <span>{selectedTable ? `T-${selectedTable}` : 'Table?'}</span>
+          <span>{selectedTable ? `T-${selectedTable}` : 'Table'}</span>
         </button>
 
         {/* 2. Wishlist */}

@@ -354,7 +354,6 @@ export default function AdminPage() {
 
         {activeTab === 'analytics' && <SalesAnalyzer />}
 
-
         {activeTab === 'menu' && (
           <MenuManagement
             items={menuItems}

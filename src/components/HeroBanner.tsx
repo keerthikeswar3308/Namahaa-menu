@@ -49,28 +49,29 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         </p>
 
         {/* Dynamic Table Action Card */}
-        <div className="max-w-md mx-auto bg-white/90 dark:bg-white/10 backdrop-blur-xl border border-amber-500/40 dark:border-namaha-gold/30 rounded-3xl p-5 shadow-xl text-slate-800 dark:text-white">
+        <button
+          type="button"
+          onClick={onOpenTableSelector}
+          className="w-full max-w-md mx-auto bg-white/90 dark:bg-white/10 backdrop-blur-xl border border-amber-500/40 dark:border-namaha-gold/30 rounded-3xl p-5 shadow-xl text-slate-800 dark:text-white hover:scale-102 active:scale-98 transition cursor-pointer text-left"
+        >
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-left">
+            <div className="flex items-center gap-3">
               <div className="p-3 rounded-2xl bg-amber-500/15 dark:bg-namaha-gold/20 text-amber-700 dark:text-namaha-gold border border-amber-500/30 dark:border-namaha-gold/40">
                 <QrCode className="w-6 h-6" />
               </div>
               <div>
-                <span className="text-xs text-slate-500 dark:text-gray-300 block uppercase font-bold">Digital QR Table Session</span>
+                <span className="text-xs text-slate-500 dark:text-gray-300 block uppercase font-bold">Select Table Number</span>
                 <span className="text-base sm:text-lg font-bold text-namaha-green-deep dark:text-white">
-                  {selectedTable ? `Active on Table #${selectedTable}` : 'No Table Selected Yet'}
+                  {selectedTable ? `Table #${selectedTable}` : 'Tap to Select Table'}
                 </span>
               </div>
             </div>
 
-            <button
-              onClick={onOpenTableSelector}
-              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white dark:text-namaha-green-deep font-extrabold text-xs sm:text-sm hover:scale-105 transition-all shadow-md flex-shrink-0"
-            >
-              {selectedTable ? 'Change Table' : 'Select Table'}
-            </button>
+            <div className="px-3 py-1.5 rounded-2xl bg-amber-500/20 text-amber-800 dark:text-namaha-gold border border-amber-500/40 text-xs font-bold flex items-center gap-1 flex-shrink-0">
+              <span>{selectedTable ? 'Change' : 'Select'}</span>
+            </div>
           </div>
-        </div>
+        </button>
 
         {/* Scroll down indicator */}
         <a

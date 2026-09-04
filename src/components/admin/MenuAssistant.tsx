@@ -27,6 +27,7 @@ import {
   Utensils,
   ChevronRight,
   ShieldCheck,
+  Flame,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -43,17 +44,20 @@ interface MenuAssistantProps {
 
 interface ActionProposal {
   type:
-    | 'change_price'
-    | 'change_image'
-    | 'rename_item'
-    | 'toggle_availability'
-    | 'change_description'
-    | 'change_category'
-    | 'change_prep_time'
-    | 'change_ingredients'
-    | 'delete_item'
-    | 'add_item'
-    | 'bulk_price';
+  | 'change_price'
+  | 'change_image'
+  | 'rename_item'
+  | 'toggle_availability'
+  | 'change_description'
+  | 'change_category'
+  | 'change_prep_time'
+  | 'change_ingredients'
+  | 'delete_item'
+  | 'add_item'
+  | 'bulk_price'
+  | 'toggle_bestseller'
+  | 'toggle_chefs_special'
+  | 'toggle_todays_special';
   itemId?: string;
   itemName?: string;
   item?: MenuItem;
@@ -92,8 +96,20 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     {
       id: 'welcome',
       sender: 'bot',
-      text: "👋 Namaste Admin! I am your AI Menu Assistant. You can manage prices, food images, names, descriptions, categories, availability, and delete dishes simply by chatting with me.",
+      text: "👋 Namaste Admin! I am your AI Menu Assistant. You can manage prices, food images, names, descriptions, categories, availability, special badges, and delete dishes simply by chatting with me or clicking any quick action below.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      options: [
+        { label: '⭐ Popular Badge', action: () => startBestsellerFlow() },
+        { label: "👨‍🍳 Chef's Special Badge", action: () => startChefsSpecialFlow() },
+        { label: "🔥 Today's Special Badge", action: () => startTodaysSpecialFlow() },
+        { label: '🖼 Food Photos', action: () => startImageFlow() },
+        { label: '✏️ Rename Item', action: () => startRenameFlow() },
+        { label: '💰 Change Price', action: () => startPriceFlow() },
+        { label: '📂 Category', action: () => startCategoryFlow() },
+        { label: '👁 Availability', action: () => startAvailabilityFlow() },
+        { label: '🗑️ Delete Item', action: () => startDeleteItemFlow(), variant: 'danger' },
+        { label: '➕ Add New Item', action: () => startAddItemWizard() },
+      ],
     },
   ]);
   const [inputText, setInputText] = useState('');
@@ -211,6 +227,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text && !selectedFile) return;
+
+    if (typeof document !== 'undefined' && document.activeElement) {
+      (document.activeElement as HTMLElement).blur();
+    }
 
     // 1. Post User Message
     addMessage({
@@ -824,6 +844,75 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
       }
     }
 
+    // 23. Popular Badge Command
+    const bestsellerMatch =
+      lower.match(/(?:mark|set|make|add|tag|remove|clear|unset|off|delete)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:as\s+|to\s+|with\s+|from\s+)?(popular|bestseller|best\s+seller)/i) ||
+      lower.match(/(?:mark|set|make|add|tag|remove|clear|unset|off|delete)\s+(popular|bestseller|best\s+seller)\s+(?:badge\s+)?(?:on|for|to|from)?\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+)/i);
+
+    if (bestsellerMatch) {
+      const isRemove = lower.includes('remove') || lower.includes('clear') || lower.includes('unset') || lower.includes('off') || lower.includes('delete');
+      let queryName = bestsellerMatch[1].trim();
+      if (bestsellerMatch[2] && (queryName === 'bestseller' || queryName === 'best seller' || queryName === 'popular')) {
+        queryName = bestsellerMatch[2].trim();
+      }
+      const matched = findItemByName(queryName);
+      if (matched.length === 1) {
+        proposeBestsellerChange(matched[0], !isRemove);
+        return;
+      } else if (matched.length > 1) {
+        askDisambiguation(`Which dish should be ${isRemove ? 'removed from' : 'marked as'} Popular?`, matched, (item) => {
+          proposeBestsellerChange(item, !isRemove);
+        });
+        return;
+      }
+    }
+
+    // 24. Chef's Special Badge Command
+    const chefMatch =
+      lower.match(/(?:mark|set|make|add|tag|remove|clear|unset|off|delete)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:as\s+|to\s+|with\s+|from\s+)?(chef\s*special|chef's\s*special|chefs\s*special)/i) ||
+      lower.match(/(?:mark|set|make|add|tag|remove|clear|unset|off|delete)\s+(chef\s*special|chef's\s*special|chefs\s*special)\s+(?:badge\s+)?(?:on|for|to|from)?\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+)/i);
+
+    if (chefMatch) {
+      const isRemove = lower.includes('remove') || lower.includes('clear') || lower.includes('unset') || lower.includes('off') || lower.includes('delete');
+      let queryName = chefMatch[1].trim();
+      if (chefMatch[2] && (queryName.includes('chef'))) {
+        queryName = chefMatch[2].trim();
+      }
+      const matched = findItemByName(queryName);
+      if (matched.length === 1) {
+        proposeChefsSpecialChange(matched[0], !isRemove);
+        return;
+      } else if (matched.length > 1) {
+        askDisambiguation(`Which dish should be ${isRemove ? 'removed from' : 'marked as'} Chef's Special?`, matched, (item) => {
+          proposeChefsSpecialChange(item, !isRemove);
+        });
+        return;
+      }
+    }
+
+    // 25. Today's Special Badge Command
+    const todaysMatch =
+      lower.match(/(?:mark|set|make|add|tag|remove|clear|unset|off|delete)\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+?)\s+(?:as\s+|to\s+|with\s+|from\s+)?(today\s*special|today's\s*special|todays\s*special)/i) ||
+      lower.match(/(?:mark|set|make|add|tag|remove|clear|unset|off|delete)\s+(today\s*special|today's\s*special|todays\s*special)\s+(?:badge\s+)?(?:on|for|to|from)?\s+(?:the\s+)?(?:item\s+|dish\s+)?(.+)/i);
+
+    if (todaysMatch) {
+      const isRemove = lower.includes('remove') || lower.includes('clear') || lower.includes('unset') || lower.includes('off') || lower.includes('delete');
+      let queryName = todaysMatch[1].trim();
+      if (todaysMatch[2] && (queryName.includes('today'))) {
+        queryName = todaysMatch[2].trim();
+      }
+      const matched = findItemByName(queryName);
+      if (matched.length === 1) {
+        proposeTodaysSpecialChange(matched[0], !isRemove);
+        return;
+      } else if (matched.length > 1) {
+        askDisambiguation(`Which dish should be ${isRemove ? 'removed from' : 'marked as'} Today's Special?`, matched, (item) => {
+          proposeTodaysSpecialChange(item, !isRemove);
+        });
+        return;
+      }
+    }
+
     // Fallback: If no intent was recognized
     addMessage({
       sender: 'bot',
@@ -832,6 +921,9 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
         { label: '✏️ Rename an Item', action: () => startRenameFlow() },
         { label: '💰 Change a Price', action: () => startPriceFlow() },
         { label: '📂 Change Category', action: () => startCategoryFlow() },
+        { label: '⭐ Popular Badge', action: () => startBestsellerFlow() },
+        { label: "👨‍🍳 Chef's Special Badge", action: () => startChefsSpecialFlow() },
+        { label: "🔥 Today's Special Badge", action: () => startTodaysSpecialFlow() },
         { label: '📝 Edit Description', action: () => startDescriptionFlow() },
         { label: '👁 Manage Availability', action: () => startAvailabilityFlow() },
         { label: '🖼 Change Dish Image', action: () => startImageFlow() },
@@ -850,8 +942,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions = categories.map((cat) => ({
@@ -904,8 +996,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions = categories.map((cat) => ({
@@ -958,8 +1050,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions = categories.map((cat) => ({
@@ -1017,8 +1109,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions = categories.map((cat) => ({
@@ -1076,8 +1168,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions = categories.map((cat) => ({
@@ -1124,8 +1216,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions = categories.map((cat) => ({
@@ -1162,8 +1254,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
     setActiveFlow(null);
     const targetItems = catFilter
       ? items.filter(
-          (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
-        )
+        (i) => i.categoryId === catFilter.id || i.categoryName.toLowerCase() === catFilter.name.toLowerCase()
+      )
       : items;
 
     const catOptions: { label: string; action: () => void; variant?: 'primary' | 'secondary' | 'danger' }[] = categories.map((cat) => ({
@@ -1199,6 +1291,88 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
         item,
         oldValue: `₹${item.price} • ${item.categoryName}`,
       },
+    });
+  };
+
+  // Helpers: Propose Special Badge Changes
+  const proposeBestsellerChange = (item: MenuItem, isBestseller: boolean) => {
+    addMessage({
+      sender: 'bot',
+      text: `⭐ Popular Badge: ${isBestseller ? 'Add Popular badge to' : 'Remove Popular badge from'} "${item.name}"?`,
+      proposal: {
+        type: 'toggle_bestseller',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: !!item.isPopular,
+        newValue: isBestseller,
+      },
+    });
+  };
+
+  const proposeChefsSpecialChange = (item: MenuItem, isChefSpecial: boolean) => {
+    addMessage({
+      sender: 'bot',
+      text: `👨‍🍳 Chef's Special Badge: ${isChefSpecial ? 'Add Chef Special badge to' : 'Remove Chef Special badge from'} "${item.name}"?`,
+      proposal: {
+        type: 'toggle_chefs_special',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: !!item.isChefSpecial,
+        newValue: isChefSpecial,
+      },
+    });
+  };
+
+  const proposeTodaysSpecialChange = (item: MenuItem, isTodaySpecial: boolean) => {
+    addMessage({
+      sender: 'bot',
+      text: `🔥 Today's Special Badge: ${isTodaySpecial ? 'Add Today Special badge to' : 'Remove Today Special badge from'} "${item.name}"?`,
+      proposal: {
+        type: 'toggle_todays_special',
+        itemId: item.id,
+        itemName: item.name,
+        item,
+        oldValue: !!item.isTodaySpecial,
+        newValue: isTodaySpecial,
+      },
+    });
+  };
+
+  const startBestsellerFlow = () => {
+    setActiveFlow(null);
+    addMessage({
+      sender: 'bot',
+      text: '⭐ **Manage Popular Badges:**\nSelect any dish below to toggle its Popular badge state:',
+      options: items.slice(0, 15).map((item) => ({
+        label: `${item.isPopular ? '⭐ Remove' : '⭐ Set'} ${item.name}`,
+        action: () => proposeBestsellerChange(item, !item.isPopular),
+      })),
+    });
+  };
+
+  const startChefsSpecialFlow = () => {
+    setActiveFlow(null);
+    addMessage({
+      sender: 'bot',
+      text: "👨‍🍳 **Manage Chef's Special Badges:**\nSelect any dish below to toggle its Chef's Special badge state:",
+      options: items.slice(0, 15).map((item) => ({
+        label: `${item.isChefSpecial ? '👨‍🍳 Remove' : '👨‍🍳 Set'} ${item.name}`,
+        action: () => proposeChefsSpecialChange(item, !item.isChefSpecial),
+      })),
+    });
+  };
+
+  const startTodaysSpecialFlow = () => {
+    setActiveFlow(null);
+    addMessage({
+      sender: 'bot',
+      text: "🔥 **Manage Today's Special Badges:**\nSelect any dish below to toggle its Today's Special badge state:",
+      options: items.slice(0, 15).map((item) => ({
+        label: `${item.isTodaySpecial ? '🔥 Remove' : '🔥 Set'} ${item.name}`,
+        action: () => proposeTodaysSpecialChange(item, !item.isTodaySpecial),
+      })),
     });
   };
 
@@ -1262,6 +1436,33 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
         addMessage({
           sender: 'bot',
           text: `✅ "${proposal.itemName}" marked as ${isAvail ? '🟢 Available' : '🔴 Unavailable'} in Supabase.`,
+        });
+      } else if (proposal.type === 'toggle_bestseller' && proposal.itemId) {
+        const isBestseller = Boolean(proposal.newValue);
+        await NamahaStore.updateMenuItem(proposal.itemId, { isPopular: isBestseller });
+        await onRefreshData();
+        updateProposalStatus(msgId, true);
+        addMessage({
+          sender: 'bot',
+          text: `✅ Success! "${proposal.itemName}" has been ${isBestseller ? 'marked as Popular ⭐' : 'removed from Popular dishes'} in Supabase.`,
+        });
+      } else if (proposal.type === 'toggle_chefs_special' && proposal.itemId) {
+        const isChefSpecial = Boolean(proposal.newValue);
+        await NamahaStore.updateMenuItem(proposal.itemId, { isChefSpecial });
+        await onRefreshData();
+        updateProposalStatus(msgId, true);
+        addMessage({
+          sender: 'bot',
+          text: `✅ Success! "${proposal.itemName}" has been ${isChefSpecial ? "marked as Chef's Special 👨‍🍳" : "removed from Chef's Specials"} in Supabase.`,
+        });
+      } else if (proposal.type === 'toggle_todays_special' && proposal.itemId) {
+        const isTodaySpecial = Boolean(proposal.newValue);
+        await NamahaStore.updateMenuItem(proposal.itemId, { isTodaySpecial });
+        await onRefreshData();
+        updateProposalStatus(msgId, true);
+        addMessage({
+          sender: 'bot',
+          text: `✅ Success! "${proposal.itemName}" has been ${isTodaySpecial ? "marked as Today's Special 🔥" : "removed from Today's Specials"} in Supabase.`,
         });
       } else if (proposal.type === 'change_image' && proposal.itemId && proposal.newImageFile) {
         // Upload to food-images bucket
@@ -1649,6 +1850,30 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
           </button>
 
           <button
+            onClick={() => startBestsellerFlow()}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500 hover:text-white text-amber-300 border border-amber-500/40 font-bold text-xs transition whitespace-nowrap"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>⭐ Popular Badge</span>
+          </button>
+
+          <button
+            onClick={() => startChefsSpecialFlow()}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-namaha-gold/20 hover:bg-namaha-gold hover:text-namaha-green-deep text-namaha-gold border border-namaha-gold/40 font-bold text-xs transition whitespace-nowrap"
+          >
+            <Utensils className="w-3.5 h-3.5 text-namaha-gold" />
+            <span>👨‍🍳 Chef's Special Badge</span>
+          </button>
+
+          <button
+            onClick={() => startTodaysSpecialFlow()}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-orange-500/20 hover:bg-orange-500 hover:text-white text-orange-300 border border-orange-500/40 font-bold text-xs transition whitespace-nowrap"
+          >
+            <Flame className="w-3.5 h-3.5 text-orange-400" />
+            <span>🔥 Today's Special Badge</span>
+          </button>
+
+          <button
             onClick={() => startImageFlow()}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white border border-white/10 font-bold text-xs transition whitespace-nowrap"
           >
@@ -1734,11 +1959,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                 <div className={`max-w-[85%] sm:max-w-[75%] space-y-2`}>
                   {/* Message Bubble */}
                   <div
-                    className={`p-4 rounded-2xl shadow-md text-sm ${
-                      isBot
+                    className={`p-4 rounded-2xl shadow-md text-sm ${isBot
                         ? 'bg-namaha-green-deep/90 border border-namaha-gold/20 text-gray-100 rounded-tl-none'
                         : 'bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-semibold rounded-tr-none shadow-namaha-gold'
-                    }`}
+                      }`}
                   >
                     <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
 
@@ -1913,11 +2137,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                         <button
                           onClick={() => handleConfirmAction(msg.id, msg.proposal!)}
                           disabled={isProcessing}
-                          className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 ${
-                            msg.proposal.type === 'delete_item'
+                          className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 ${msg.proposal.type === 'delete_item'
                               ? 'bg-red-600 hover:bg-red-700 text-white'
                               : 'bg-gradient-to-r from-namaha-gold to-amber-500 text-namaha-green-deep font-extrabold'
-                          }`}
+                            }`}
                         >
                           {isProcessing ? (
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1928,10 +2151,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                             {msg.proposal.type === 'delete_item'
                               ? 'Permanently Delete'
                               : msg.proposal.type === 'change_image'
-                              ? 'Replace Image'
-                              : msg.proposal.type === 'add_item'
-                              ? 'Add Item to Supabase'
-                              : 'Confirm Change'}
+                                ? 'Replace Image'
+                                : msg.proposal.type === 'add_item'
+                                  ? 'Add Item to Supabase'
+                                  : 'Confirm Change'}
                           </span>
                         </button>
                       </div>
@@ -1941,11 +2164,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                   {/* Confirmed / Cancelled Status Indicator */}
                   {msg.proposal && (msg.proposal.confirmed || msg.proposal.cancelled) && (
                     <div
-                      className={`text-xs px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 font-bold ${
-                        msg.proposal.confirmed
+                      className={`text-xs px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 font-bold ${msg.proposal.confirmed
                           ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                           : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                      }`}
+                        }`}
                     >
                       {msg.proposal.confirmed ? (
                         <>
@@ -1969,11 +2191,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                           key={idx}
                           onClick={opt.action}
                           disabled={isProcessing}
-                          className={`px-3.5 py-1.5 rounded-full border font-bold text-xs transition-all shadow-xs flex items-center gap-1 ${
-                            opt.variant === 'danger'
+                          className={`px-3.5 py-1.5 rounded-full border font-bold text-xs transition-all shadow-xs flex items-center gap-1 ${opt.variant === 'danger'
                               ? 'bg-red-500/15 hover:bg-red-500 hover:text-white border-red-500/40 text-red-300'
                               : 'bg-namaha-gold/15 hover:bg-namaha-gold hover:text-namaha-green-deep border-namaha-gold/40 text-namaha-gold'
-                          }`}
+                            }`}
                         >
                           <span>{opt.label}</span>
                           <ChevronRight className="w-3 h-3 opacity-70" />
@@ -2004,11 +2225,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-white truncate block text-sm">{item.name}</span>
                                 <span
-                                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${
-                                    item.isAvailable
+                                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${item.isAvailable
                                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                                       : 'bg-red-500/20 text-red-300 border-red-500/30'
-                                  }`}
+                                    }`}
                                 >
                                   {item.isAvailable ? '🟢 Available' : '🔴 Out of Stock'}
                                 </span>
@@ -2044,11 +2264,10 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                             {/* Availability Toggle */}
                             <button
                               onClick={() => proposeAvailabilityChange(item, !item.isAvailable)}
-                              className={`px-2 py-1 rounded-lg border font-semibold text-[11px] transition flex items-center gap-1 ${
-                                item.isAvailable
+                              className={`px-2 py-1 rounded-lg border font-semibold text-[11px] transition flex items-center gap-1 ${item.isAvailable
                                   ? 'bg-amber-500/15 hover:bg-amber-500 hover:text-white border-amber-500/30 text-amber-300'
                                   : 'bg-emerald-500/15 hover:bg-emerald-500 hover:text-white border-emerald-500/30 text-emerald-300'
-                              }`}
+                                }`}
                               title={item.isAvailable ? 'Mark Out of Stock' : 'Mark Available'}
                             >
                               <Eye className="w-3 h-3" />
@@ -2230,8 +2449,8 @@ export const MenuAssistant: React.FC<MenuAssistantProps> = ({
                   ? activeFlow.type === 'rename'
                     ? `Type new name for "${activeFlow.item.name}"...`
                     : activeFlow.type === 'price'
-                    ? `Type new price for "${activeFlow.item.name}" (e.g. 50)...`
-                    : `Type new description for "${activeFlow.item.name}"...`
+                      ? `Type new price for "${activeFlow.item.name}" (e.g. 50)...`
+                      : `Type new description for "${activeFlow.item.name}"...`
                   : "Tell Menu Assistant what to do (e.g. 'Rename Idly to Ghee Idly', 'Change price of Dosa to 70')..."
               }
               className="flex-1 py-3 px-4 rounded-2xl bg-white/10 border border-white/15 text-white placeholder-gray-400 text-sm focus:outline-none focus:border-namaha-gold transition"

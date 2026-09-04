@@ -76,10 +76,15 @@ export const OrderHistoryManagement: React.FC = () => {
     const formattedTime = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     printWindow.document.write(`
       <html>
-        <head><title>KOT ${order.orderNumber}</title></head>
-        <body onload="window.print(); window.close();" style="font-family: system-ui; padding: 15px; width: 280px;">
-          <div style="text-align: center;"><strong>NAMAHAA TIFFIN ROOM</strong><br/>*** KITCHEN ORDER TICKET (KOT) ***</div>
-          <hr/>
+        <head>
+          <title></title>
+          <style>
+            @page { size: auto; margin: 0mm; }
+            body { font-family: system-ui, -apple-system, sans-serif; color: #000; margin: 0; padding: 10px; width: 280px; }
+            table { width: 100%; border-collapse: collapse; }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
           <div><strong>Order #:</strong> ${order.orderNumber}<br/><strong>Table #:</strong> ${order.tableNumber}<br/><strong>Time:</strong> ${formattedTime}</div>
           <hr/>
           <table>${itemsHtml}</table>
@@ -103,7 +108,7 @@ export const OrderHistoryManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-white dark:bg-namaha-green-deep border border-emerald-950/10 dark:border-namaha-gold/20 shadow-xl">
         <div>

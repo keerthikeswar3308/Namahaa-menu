@@ -24,9 +24,11 @@ import {
 import { getFreshImageUrl } from '@/lib/imageUtils';
 import { NamahaStore } from '@/lib/store';
 import { OrderStore } from '@/lib/orderStore';
+import { getRestaurantBusinessDateStr, parseSafeDate } from '@/lib/businessDay';
 import { Order, RestaurantInfo, OrderStatus } from '@/types';
 
-export const CartBottomSheet: React.FC = () => {
+
+const CartBottomSheetInner: React.FC = () => {
   const {
     cart,
     isCartOpen,
@@ -51,27 +53,27 @@ export const CartBottomSheet: React.FC = () => {
   const [customerName, setCustomerName] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   // Secure Table Session Isolation
   const [sessionId, setSessionId] = useState<string>('');
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
-  // Dedicated Order Details View Modal State
+  // Dedicated Order Details View & Success Modal State
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
+  const [orderSuccessConfirmation, setOrderSuccessConfirmation] = useState<Order | null>(null);
 
   // Initialize Session ID (Persistent in localStorage across browser restarts)
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      let storedId = localStorage.getItem('namahaa_session_id') || sessionStorage.getItem('namahaa_session_id');
-      if (!storedId) {
-        storedId = 'sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
-      }
-      localStorage.setItem('namahaa_session_id', storedId);
-      sessionStorage.setItem('namahaa_session_id', storedId);
-      setSessionId(storedId);
+      const deviceSessId = NamahaStore.getDeviceSessionId();
+      localStorage.setItem('namahaa_session_id', deviceSessId);
+      sessionStorage.setItem('namahaa_session_id', deviceSessId);
+      setSessionId(deviceSessId);
     }
   }, []);
+
 
   useEffect(() => {
     setSelectedTable(NamahaStore.getSelectedTable() || 1);
@@ -94,7 +96,7 @@ export const CartBottomSheet: React.FC = () => {
   // Load Customer Orders & Subscribe to Realtime Status Updates
   const loadCustomerOrders = async () => {
     if (!sessionId) return;
-    const fetched = await OrderStore.fetchCustomerOrders(selectedTable, sessionId);
+    const fetched = await OrderStore.fetchCustomerOrders(null, sessionId);
     setCustomerOrders(fetched);
   };
 
@@ -114,20 +116,21 @@ export const CartBottomSheet: React.FC = () => {
       const unsubscribe = OrderStore.subscribeToCustomerSessionOrders(sessionId, (payload) => {
         if (payload && payload.new) {
           const raw = payload.new;
+          const rawIdStr = String(raw.id || `ord_${Date.now()}`);
           const mappedOrder: Order = {
-            id: raw.id,
-            orderNumber: raw.order_number || raw.orderNumber || `#ORD-${raw.id.slice(-6)}`,
+            id: rawIdStr,
+            orderNumber: String(raw.order_number || raw.orderNumber || `#ORD-${rawIdStr.slice(-6)}`),
             tableNumber: Number(raw.table_number || raw.tableNumber || selectedTable || 1),
             items: Array.isArray(raw.items) ? raw.items : [],
             totalAmount: Number(raw.total_amount || raw.totalAmount || 0),
-            orderStatus: raw.order_status || 'pending',
-            customerName: raw.customer_name || '',
-            customerPhone: raw.customer_phone || '',
-            notes: raw.notes || '',
-            sessionId: raw.session_id || sessionId,
-            idempotencyKey: raw.idempotency_key || '',
-            createdAt: raw.created_at || new Date().toISOString(),
-            updatedAt: raw.updated_at || new Date().toISOString(),
+            orderStatus: String(raw.order_status || 'pending') as OrderStatus,
+            customerName: String(raw.customer_name || ''),
+            customerPhone: String(raw.customer_phone || ''),
+            notes: String(raw.notes || ''),
+            sessionId: String(raw.session_id || sessionId),
+            idempotencyKey: String(raw.idempotency_key || ''),
+            createdAt: String(raw.created_at || new Date().toISOString()),
+            updatedAt: String(raw.updated_at || new Date().toISOString()),
           };
 
           setCustomerOrders((prev) => {
@@ -164,18 +167,31 @@ export const CartBottomSheet: React.FC = () => {
 
   if (!isCartOpen) return null;
 
-  const grandTotal = cart.reduce(
-    (sum, { item, quantity }) => sum + quantity * Number(item.price),
-    0
-  );
+  const grandTotal = (cart || []).reduce((sum, entry) => {
+    if (!entry || !entry.item) return sum;
+    const price = Number(entry.item.price || 0);
+    const qty = Number(entry.quantity || 1);
+    return sum + qty * price;
+  }, 0);
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
     if (isSubmittingOrder) return;
 
-    setIsSubmittingOrder(true);
+    if (!selectedTable) {
+      setSubmissionError('Please select your table number before sending your order to the kitchen.');
+      return;
+    }
 
-    const idempotencyKey = `idem_${sessionId}_${selectedTable || 1}_${Date.now()}`;
+    if (typeof document !== 'undefined' && document.activeElement) {
+      (document.activeElement as HTMLElement).blur();
+    }
+
+    setIsSubmittingOrder(true);
+    setSubmissionError(null);
+    setOrderSuccessConfirmation(null);
+
+    const idempotencyKey = `idem_${sessionId}_${selectedTable}_${Date.now()}`;
 
     const orderItems = cart.map(({ item, quantity }) => ({
       id: item.id,
@@ -186,25 +202,41 @@ export const CartBottomSheet: React.FC = () => {
       isVeg: item.isVeg,
     }));
 
-    const result = await OrderStore.createOrder({
-      tableNumber: selectedTable || 1,
-      items: orderItems,
-      totalAmount: grandTotal,
-      customerName,
-      notes: kitchenNotes,
-      sessionId,
-      idempotencyKey,
-    });
+    try {
+      const result = await OrderStore.createOrder({
+        tableNumber: selectedTable,
+        items: orderItems,
+        totalAmount: grandTotal,
+        customerName,
+        notes: kitchenNotes,
+        sessionId,
+        idempotencyKey,
+      });
 
-    setIsSubmittingOrder(false);
+      if (result.success && result.order) {
+        setPlacedOrder(result.order);
+        setCustomerOrders((prev) => {
+          const filtered = prev.filter((o) => o.id !== result.order!.id);
+          return [result.order!, ...filtered];
+        });
+        clearCart();
+        setIsCheckoutOpen(false);
+        setOrderSuccessConfirmation(result.order);
 
-    if (result.success && result.order) {
-      setPlacedOrder(result.order);
-      clearCart();
-      setIsCheckoutOpen(false);
-      setCartViewMode('orders');
-    } else {
-      alert(result.error || 'Could not place order. Please try again.');
+        // Auto-close success popup after brief confirmation (1.4 seconds)
+        setTimeout(() => {
+          setOrderSuccessConfirmation(null);
+          closeCart();
+          setCartViewMode('orders');
+        }, 1400);
+      } else {
+        setSubmissionError(result.error || 'Unable to send your order. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('Order creation exception:', err);
+      setSubmissionError('Network error placing order. Please check your connection and try again.');
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -238,19 +270,19 @@ export const CartBottomSheet: React.FC = () => {
       {/* Bottom Sheet Drawer / Modal Container */}
       <div className="relative w-full sm:max-w-lg bg-namaha-green-dark border-t-2 sm:border-2 border-namaha-gold/40 rounded-t-3xl sm:rounded-3xl shadow-2xl text-white max-h-[85vh] sm:max-h-[80vh] flex flex-col overflow-hidden z-10 animate-slide-up sm:animate-scale-up">
         
-        {/* Full Overlay when Order is Submitting / Transmitting */}
+        {/* Full Viewport Centered Overlay when Order is Submitting / Transmitting */}
         {isSubmittingOrder && (
-          <div className="absolute inset-0 z-50 bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-5 animate-fade-in">
+          <div className="fixed inset-0 z-[100] bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-5 animate-fade-in my-auto">
             {/* Above Loading: Estimated prep timer & status note */}
             <div className="space-y-2 max-w-xs">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold text-[11px] font-extrabold tracking-wide uppercase shadow-sm">
                 <Clock className="w-3.5 h-3.5 text-namaha-gold animate-pulse" />
                 <span>Est. Kitchen Prep: ~15–20 Mins</span>
               </div>
-              <h3 className="text-base font-serif font-bold text-white pt-1">
+              <h3 className="text-lg font-serif font-bold text-white pt-1">
                 Sending Order to Kitchen...
               </h3>
-              <p className="text-[11px] text-emerald-300 font-medium leading-relaxed">
+              <p className="text-xs text-emerald-300 font-semibold leading-relaxed">
                 Transmitting table items directly to kitchen display
               </p>
             </div>
@@ -264,14 +296,70 @@ export const CartBottomSheet: React.FC = () => {
             </div>
 
             {/* Below Loading: Keep screen active note */}
-            <div className="p-3 rounded-2xl bg-black/50 border border-amber-500/30 text-amber-300 text-[11px] font-semibold max-w-xs space-y-1 shadow-lg">
-              <div className="flex items-center justify-center gap-1.5 text-amber-400 font-bold text-[11px]">
-                <Smartphone className="w-3.5 h-3.5 animate-pulse" />
+            <div className="p-3.5 rounded-2xl bg-black/60 border border-amber-500/30 text-amber-300 text-xs font-semibold max-w-xs space-y-1 shadow-xl">
+              <div className="flex items-center justify-center gap-1.5 text-amber-400 font-bold text-xs">
+                <Smartphone className="w-4 h-4 animate-pulse" />
                 <span>Please Keep Screen Active</span>
               </div>
-              <p className="text-[10px] text-gray-300 font-normal leading-normal">
+              <p className="text-[11px] text-gray-300 font-normal leading-normal">
                 Do not turn off your screen or navigate away until order transmission completes.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Full Viewport Centered Overlay when Order is Successfully Sent */}
+        {orderSuccessConfirmation && !isSubmittingOrder && (
+          <div className="fixed inset-0 z-[100] bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fade-in my-auto overflow-y-auto">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 text-emerald-400 flex items-center justify-center shadow-lg flex-shrink-0">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+
+            <div>
+              <div className="text-[10px] text-namaha-gold font-extrabold uppercase tracking-widest">SUCCESS</div>
+              <h3 className="text-xl font-serif font-bold text-white">ORDER SENT TO KITCHEN!</h3>
+            </div>
+
+            <div className="w-full max-w-xs bg-black/60 p-4 rounded-2xl border border-namaha-gold/30 text-xs space-y-1.5 text-left shadow-lg">
+              <div className="flex justify-between items-center">
+                <span className="font-extrabold text-white text-sm">{orderSuccessConfirmation.orderNumber}</span>
+                <span className="px-2.5 py-0.5 rounded-lg bg-namaha-gold/20 text-namaha-gold font-extrabold text-[11px]">Table #{orderSuccessConfirmation.tableNumber}</span>
+              </div>
+              <div className="text-[11px] text-emerald-300 font-semibold">Kitchen received your items for preparation</div>
+            </div>
+
+            <div className="w-full max-w-xs bg-black/40 p-3.5 rounded-2xl border border-white/10 text-xs text-left max-h-36 overflow-y-auto space-y-1">
+              <span className="text-[10px] font-extrabold text-namaha-gold uppercase block mb-1">Items Sent to Kitchen:</span>
+              {orderSuccessConfirmation.items.map((item, idx) => (
+                <div key={idx} className="flex justify-between text-gray-300">
+                  <span>{item.quantity}× {item.name}</span>
+                  <span className="font-semibold text-namaha-gold">₹{(item.price * item.quantity).toFixed(0)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 w-full max-w-xs pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderSuccessConfirmation(null);
+                  closeCart();
+                }}
+                className="px-4 py-2.5 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs shadow-md hover:bg-amber-400 transition"
+              >
+                + ADD MORE ITEMS
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderSuccessConfirmation(null);
+                  setCartViewMode('orders');
+                }}
+                className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs border border-white/10 transition"
+              >
+                TODAY&apos;S ITEMS
+              </button>
             </div>
           </div>
         )}
@@ -285,7 +373,7 @@ export const CartBottomSheet: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-serif font-bold text-namaha-gold">
-                {cartViewMode === 'orders' ? 'Your Table Orders' : 'Your Table Cart'}
+                {cartViewMode === 'orders' ? 'Items Added Today' : 'Your Table Cart'}
               </h2>
               {selectedTable && (
                 <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
@@ -303,7 +391,7 @@ export const CartBottomSheet: React.FC = () => {
                 onClick={() => setCartViewMode('orders')}
                 className="px-3 py-1.5 rounded-xl border border-namaha-gold/30 bg-namaha-gold/10 text-namaha-gold text-[10px] font-extrabold tracking-wider uppercase hover:bg-namaha-gold/20 transition"
               >
-                Track Orders ({customerOrders.length})
+                Today&apos;s Items ({customerOrders.length})
               </button>
             )}
             {cartViewMode === 'orders' && cart.length > 0 && (
@@ -327,13 +415,18 @@ export const CartBottomSheet: React.FC = () => {
         {/* View Mode Switching rendering logic */}
         {cartViewMode === 'orders' ? (
           /* ======================================================== */
-          /* 1. CUSTOMER ORDER TRACKER VIEW MODE                      */
+          /* 1. CUSTOMER ITEMS ADDED TODAY VIEW MODE                  */
           /* ======================================================== */
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <span className="text-xs uppercase font-extrabold tracking-wider text-gray-400">
-                Active Order Timeline
-              </span>
+              <div>
+                <span className="text-xs uppercase font-extrabold tracking-wider text-namaha-gold block">
+                  Your Today&apos;s Orders & Dishes
+                </span>
+                <span className="text-[10px] text-gray-400 font-medium block">
+                  All active items ordered from this device today
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={handleManualRefresh}
@@ -341,157 +434,142 @@ export const CartBottomSheet: React.FC = () => {
                 className="flex items-center gap-1.5 text-[11px] text-namaha-gold font-bold hover:underline active:scale-95 transition disabled:opacity-70"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isManualRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isManualRefreshing ? 'Refreshing...' : 'Refresh Status'}</span>
+                <span>{isManualRefreshing ? 'Refreshing...' : 'Refresh'}</span>
               </button>
             </div>
 
             {customerOrders.length > 0 ? (
-              <div className="space-y-6 pb-6">
-                {/* ACTIVE ORDERS SECTION */}
-                {customerOrders.filter((o) => o.orderStatus === 'pending' || o.orderStatus === 'preparing' || o.orderStatus === 'served').length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-xs uppercase font-extrabold tracking-wider text-amber-400">
-                      <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
-                      <span>Active Kitchen Orders ({customerOrders.filter((o) => o.orderStatus === 'pending' || o.orderStatus === 'preparing' || o.orderStatus === 'served').length})</span>
+              (() => {
+                const todayBusinessDayStr = getRestaurantBusinessDateStr(new Date());
+
+                // Filter orders belonging to today's business day
+                const todayOrders = (customerOrders || []).filter((o) => {
+                  if (!o || !o.createdAt) return false;
+                  return getRestaurantBusinessDateStr(parseSafeDate(o.createdAt)) === todayBusinessDayStr && o.orderStatus !== 'cancelled';
+                });
+
+                // Aggregate items added today
+                const itemsAddedTodayMap = new Map<string, { id: string; name: string; price: number; quantity: number; image?: string }>();
+                let totalTodayAmount = 0;
+                let totalTodayUnits = 0;
+
+                todayOrders.forEach((ord) => {
+                  if (!ord) return;
+                  totalTodayAmount += Number(ord.totalAmount || 0);
+                  (ord.items || []).forEach((item: any) => {
+                    if (!item) return;
+                    const key = String(item.id || item.name || 'item');
+                    const qty = Number(item.quantity || 1);
+                    const price = Number(item.price || 0);
+                    totalTodayUnits += qty;
+
+                    if (!itemsAddedTodayMap.has(key)) {
+                      itemsAddedTodayMap.set(key, {
+                        id: key,
+                        name: item.name || 'Dish Item',
+                        price,
+                        quantity: qty,
+                        image: item.image,
+                      });
+                    } else {
+                      const existing = itemsAddedTodayMap.get(key);
+                      if (existing) {
+                        existing.quantity += qty;
+                      }
+                    }
+                  });
+                });
+
+                const aggregatedItems = Array.from(itemsAddedTodayMap.values());
+
+                return (
+                  <div className="space-y-6 pb-6">
+                    {/* SUMMARY KPI CARD FOR TODAY'S ITEMS */}
+                    <div className="p-5 rounded-3xl bg-black/50 border border-namaha-gold/30 space-y-4 shadow-xl">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                        <div>
+                          <span className="text-[10px] text-namaha-gold font-extrabold uppercase tracking-widest block">TABLE #{selectedTable || 1} SUMMARY</span>
+                          <h4 className="font-bold text-base text-white">{totalTodayUnits} Item(s) Added Today</h4>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-gray-400 block uppercase font-bold">Total Bill Value</span>
+                          <span className="text-xl font-serif font-extrabold text-namaha-gold">₹{totalTodayAmount.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      {/* Itemized List */}
+                      {aggregatedItems.length > 0 ? (
+                        <div className="space-y-2">
+                          <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block mb-1">ALL DISHES ADDED TODAY:</span>
+                          {aggregatedItems.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-xs p-2.5 rounded-2xl bg-white/5 border border-white/5">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-namaha-gold/20 text-namaha-gold font-extrabold text-xs flex items-center justify-center flex-shrink-0">
+                                  {item.quantity}×
+                                </span>
+                                <span className="font-bold text-white">{item.name}</span>
+                              </div>
+                              <span className="font-semibold text-namaha-gold">₹{(item.price * item.quantity).toFixed(0)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">No active items added today.</p>
+                      )}
                     </div>
 
-                    {customerOrders.filter((o) => o.orderStatus === 'pending' || o.orderStatus === 'preparing' || o.orderStatus === 'served').map((order) => {
-                      const stateInfo = getOrderStatusDisplay(order.orderStatus);
+                    {/* SUBMITTED ORDERS RECEIPTS LIST */}
+                    <div className="space-y-3">
+                      <span className="text-[10px] uppercase font-extrabold tracking-wider text-gray-400 block">
+                        Submitted Orders Receipts ({todayOrders.length})
+                      </span>
 
-                      return (
-                        <div
-                          key={order.id}
-                          className="p-5 rounded-3xl bg-black/50 border border-namaha-gold/30 space-y-4 shadow-xl animate-fade-in"
-                        >
-                          {/* Order Header */}
-                          <div className="flex items-center justify-between">
-                            <div>
+                      {todayOrders.map((order) => {
+                        if (!order) return null;
+                        const ordId = order.id || `ord_${Math.random()}`;
+                        const ordNum = order.orderNumber || `#ORD-${String(ordId).slice(-6)}`;
+                        const tblNum = order.tableNumber || 1;
+                        const itemsCnt = Array.isArray(order.items) ? order.items.length : 0;
+
+                        return (
+                          <div
+                            key={ordId}
+                            className="p-4 rounded-2xl bg-black/30 border border-white/10 space-y-2 text-xs"
+                          >
+                            <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-base text-white">
-                                  {order.orderNumber}
-                                </h4>
-                                <span className="px-2 py-0.5 rounded-md bg-namaha-gold/20 text-namaha-gold text-[10px] font-extrabold">
-                                  Table #{order.tableNumber}
+                                <h5 className="font-bold text-white text-sm">{ordNum}</h5>
+                                <span className="px-2 py-0.5 rounded bg-namaha-gold/20 text-namaha-gold text-[10px] font-extrabold">
+                                  Table #{tblNum}
                                 </span>
                               </div>
                               <span className="text-[10px] text-gray-400">
-                                {new Date(order.createdAt).toLocaleDateString()} at{' '}
-                                {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {parseSafeDate(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
-                          </div>
 
-                          {/* Items Preview */}
-                          <div className="space-y-1.5 border-t border-b border-white/10 py-3">
-                            {order.items.map((item, idx) => (
-                              <div key={idx} className="flex justify-between text-xs text-gray-300">
-                                <span>
-                                  {item.quantity} × {item.name}
-                                </span>
-                                <span className="font-semibold">₹{(item.price * item.quantity).toFixed(0)}</span>
-                              </div>
-                            ))}
-                            <div className="flex justify-between text-xs pt-1.5 font-bold text-namaha-gold">
-                              <span>Order Total:</span>
-                              <span>₹{order.totalAmount.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Timeline Milestones & Details Button */}
-                          <div className="space-y-3 pt-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-gray-300">Status:</span>
-                              <span className={`font-bold ${stateInfo.color}`}>{stateInfo.label}</span>
-                            </div>
-                            
-                            {/* Visual Step Bar */}
-                            <div className="grid grid-cols-4 gap-1.5 h-1.5 bg-white/15 rounded-full overflow-hidden">
-                              {[1, 2, 3, 4].map((stepNum) => (
-                                <div
-                                  key={stepNum}
-                                  className={`rounded-full transition-all duration-300 ${
-                                    (stateInfo.step || 0) >= stepNum
-                                      ? 'bg-amber-500'
-                                      : 'bg-transparent'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                            
-                            <div className="flex items-center justify-between pt-1">
-                              <p className="text-[11px] text-gray-400 italic">
-                                &quot;{stateInfo.desc}&quot;
-                              </p>
+                            <div className="flex items-center justify-between text-gray-300 pt-1 border-t border-white/5">
+                              <span>{itemsCnt} item(s)</span>
                               <button
                                 type="button"
                                 onClick={() => setSelectedOrderDetails(order)}
-                                className="px-3 py-1.5 rounded-xl bg-namaha-gold/15 hover:bg-namaha-gold/25 text-namaha-gold border border-namaha-gold/30 text-xs font-bold transition"
+                                className="px-2.5 py-1 rounded-xl bg-namaha-gold/15 hover:bg-namaha-gold/25 text-namaha-gold border border-namaha-gold/30 text-xs font-bold transition"
                               >
-                                View Order Details
+                                View Receipt
                               </button>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* COMPLETED ORDERS HISTORY SECTION */}
-                {customerOrders.filter((o) => o.orderStatus === 'completed' || o.orderStatus === 'cancelled').length > 0 && (
-                  <div className="space-y-4 pt-2">
-                    <div className="flex items-center gap-2 text-xs uppercase font-extrabold tracking-wider text-emerald-400 border-t border-white/10 pt-4">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Completed Order History ({customerOrders.filter((o) => o.orderStatus === 'completed' || o.orderStatus === 'cancelled').length})</span>
+                        );
+                      })}
                     </div>
-
-                    {customerOrders.filter((o) => o.orderStatus === 'completed' || o.orderStatus === 'cancelled').map((order) => (
-                      <div
-                        key={order.id}
-                        className="p-4 rounded-2xl bg-black/30 border border-emerald-500/20 space-y-3 opacity-90 hover:opacity-100 transition"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h5 className="font-bold text-sm text-white">{order.orderNumber}</h5>
-                              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold">
-                                Table #{order.tableNumber}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(order.createdAt).toLocaleDateString()} at{' '}
-                              {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                            order.orderStatus === 'completed'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                          }`}>
-                            {order.orderStatus === 'completed' ? '✓ Completed' : 'Cancelled'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs text-gray-300 border-t border-white/5 pt-2">
-                          <span>{order.items.length} item(s) • Total: ₹{order.totalAmount.toFixed(2)}</span>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedOrderDetails(order)}
-                            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-gray-200 text-xs font-semibold transition"
-                          >
-                            Receipt
-                          </button>
-                        </div>
-                      </div>
-                    ))}
                   </div>
-                )}
-              </div>
+                );
+              })()
             ) : (
               <div className="py-12 text-center text-gray-400 space-y-3 bg-black/20 rounded-3xl border border-white/5">
                 <ChefHat className="w-12 h-12 mx-auto text-gray-600 opacity-50" />
-                <p className="text-sm font-semibold text-gray-200">No active orders</p>
-                <p className="text-xs text-gray-400">Order items from the cart to watch cooking milestones live!</p>
+                <p className="text-sm font-semibold text-gray-200">No items added today</p>
+                <p className="text-xs text-gray-400">Items added to your table will appear here.</p>
               </div>
             )}
           </div>
@@ -607,6 +685,24 @@ export const CartBottomSheet: React.FC = () => {
               </div>
             </div>
 
+            {/* Error Banner with Retry */}
+            {submissionError && (
+              <div className="p-3.5 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs space-y-2">
+                <div className="flex items-center gap-2 text-red-400 font-bold">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Unable to send your order</span>
+                </div>
+                <p className="text-[11px] text-gray-300">{submissionError}</p>
+                <button
+                  type="button"
+                  onClick={handlePlaceOrder}
+                  className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md transition active:scale-98"
+                >
+                  TRY AGAIN
+                </button>
+              </div>
+            )}
+
             {/* Order Total & Submit Button */}
             <div className="pt-4 border-t border-white/10 flex items-center justify-between">
               <div>
@@ -640,6 +736,22 @@ export const CartBottomSheet: React.FC = () => {
           /* ======================================================== */
           <>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {cart.length > 0 && (
+                <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-2">
+                  <span className="text-xs uppercase font-extrabold tracking-wider text-namaha-gold">
+                    Items Selected ({totalCount})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={closeCart}
+                    className="px-3 py-1 rounded-xl bg-namaha-gold/15 border border-namaha-gold/30 text-namaha-gold text-xs font-bold hover:bg-namaha-gold/25 transition flex items-center gap-1 active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add More Items</span>
+                  </button>
+                </div>
+              )}
+
               {cart.length === 0 ? (
                 <div className="py-12 text-center text-gray-400 space-y-3">
                   <ShoppingBag className="w-12 h-12 mx-auto text-gray-600 opacity-50" />
@@ -653,9 +765,11 @@ export const CartBottomSheet: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                cart.map(({ item, quantity }) => {
+                (cart || []).map((entry) => {
+                  if (!entry || !entry.item || !entry.item.id) return null;
+                  const { item, quantity } = entry;
                   const inWishlist = isInWishlist(item.id);
-                  const lineTotal = quantity * Number(item.price);
+                  const lineTotal = (Number(quantity) || 1) * Number(item.price || 0);
 
                   return (
                     <div
@@ -666,15 +780,15 @@ export const CartBottomSheet: React.FC = () => {
                         {/* eslint-disable-next-next/no-img-element */}
                         <img
                           src={getFreshImageUrl(item.image)}
-                          alt={item.name}
+                          alt={item.name || 'Dish'}
                           className="w-full h-full object-cover"
                         />
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-serif font-bold text-white text-sm truncate">{item.name}</h3>
+                        <h3 className="font-serif font-bold text-white text-sm truncate">{item.name || 'Dish'}</h3>
                         <p className="text-xs text-namaha-gold font-sans font-bold mt-0.5">
-                          ₹{item.price} × {quantity} = <span className="text-amber-300">₹{lineTotal}</span>
+                          ₹{item.price || 0} × {quantity} = <span className="text-amber-300">₹{lineTotal.toFixed(2)}</span>
                         </p>
                         
                         <button
@@ -796,8 +910,8 @@ export const CartBottomSheet: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-400">
-                    Placed on {new Date(selectedOrderDetails.createdAt).toLocaleDateString()} at{' '}
-                    {new Date(selectedOrderDetails.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    Placed on {parseSafeDate(selectedOrderDetails.createdAt).toLocaleDateString()} at{' '}
+                    {parseSafeDate(selectedOrderDetails.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
                 <button
@@ -839,24 +953,33 @@ export const CartBottomSheet: React.FC = () => {
                     Ordered Dishes & Quantities
                   </h4>
                   <div className="space-y-2 bg-black/30 p-3 rounded-2xl border border-white/5">
-                    {selectedOrderDetails.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-xs text-gray-200">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-namaha-gold font-extrabold flex items-center justify-center text-[11px]">
-                            {item.quantity}×
+                    {(Array.isArray(selectedOrderDetails.items) ? selectedOrderDetails.items : []).map((item, idx) => {
+                      if (!item) return null;
+                      const qty = Number(item.quantity || 1);
+                      const prc = Number(item.price || 0);
+                      return (
+                        <div key={idx} className="flex justify-between items-center text-xs text-gray-200">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-namaha-gold font-extrabold flex items-center justify-center text-[11px]">
+                              {qty}×
+                            </span>
+                            <span className="font-semibold">{item.name || 'Dish Item'}</span>
+                          </div>
+                          <span className="font-bold text-white">
+                            ₹{(prc * qty).toFixed(2)}
                           </span>
-                          <span className="font-semibold">{item.name}</span>
                         </div>
-                        <span className="font-bold text-white">
-                          ₹{(item.price * item.quantity).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="border-t border-white/10 pt-2 flex justify-between items-center text-sm font-bold text-namaha-gold">
-                      <span>Grand Total:</span>
-                      <span className="text-base">₹{selectedOrderDetails.totalAmount.toFixed(2)}</span>
-                    </div>
+                      );
+                    })}
                   </div>
+                </div>
+
+                {/* Bill Breakdown */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-namaha-gold/15 to-transparent border border-namaha-gold/30 flex justify-between items-center text-xs">
+                  <span className="font-bold text-gray-200">Total Bill Amount:</span>
+                  <span className="text-base font-serif font-extrabold text-namaha-gold">
+                    ₹{Number(selectedOrderDetails.totalAmount || 0).toFixed(2)}
+                  </span>
                 </div>
 
                 {/* Kitchen Notes */}
@@ -867,19 +990,152 @@ export const CartBottomSheet: React.FC = () => {
                 )}
               </div>
 
-              {/* Close Footer Button */}
-              <button
-                type="button"
-                onClick={() => setSelectedOrderDetails(null)}
-                className="w-full py-3 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs shadow-md hover:bg-amber-400 transition"
-              >
-                Close Order Details
-              </button>
+              {/* Modal Footer Buttons */}
+              <div className="grid grid-cols-2 gap-3 pt-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedOrderDetails) return;
+                    const printWindow = window.open('', '_blank', 'width=400,height=600');
+                    if (!printWindow) return;
+
+                    const itemsHtml = (Array.isArray(selectedOrderDetails.items) ? selectedOrderDetails.items : [])
+                      .map(
+                        (i) => {
+                          if (!i) return '';
+                          const qty = Number(i.quantity || 1);
+                          const prc = Number(i.price || 0);
+                          return `
+                      <tr style="border-bottom: 1px dashed #ccc;">
+                        <td style="padding: 6px 0; text-align: left;">${qty}x ${i.name || 'Dish Item'}</td>
+                        <td style="padding: 6px 0; text-align: right; font-weight: bold;">₹${(prc * qty).toFixed(2)}</td>
+                      </tr>`;
+                        }
+                      )
+                      .join('');
+
+                    const formattedTime = parseSafeDate(selectedOrderDetails.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const formattedDate = parseSafeDate(selectedOrderDetails.createdAt).toLocaleDateString();
+
+                    printWindow.document.write(`
+                      <!DOCTYPE html>
+                      <html>
+                      <head>
+                        <title></title>
+                        <style>
+                          @page { size: auto; margin: 0mm; }
+                          body { font-family: monospace; padding: 15px; width: 280px; margin: 0 auto; color: #000; font-size: 12px; }
+                          h2 { text-align: center; margin: 5px 0; font-size: 16px; text-transform: uppercase; }
+                          p { text-align: center; margin: 2px 0; font-size: 11px; }
+                          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+                          table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                          .total { font-size: 14px; font-weight: bold; text-align: right; }
+                          .footer { text-align: center; margin-top: 12px; font-size: 10px; }
+                        </style>
+                      </head>
+                      <body onload="window.print(); setTimeout(() => window.close(), 500);">
+                        <h2>NAMAHAA TIFFIN ROOM</h2>
+                        <p>Authentic South Indian Flavors</p>
+                        <div class="divider"></div>
+                        <p><strong>ORDER ${selectedOrderDetails.orderNumber}</strong> | Table #${selectedOrderDetails.tableNumber}</p>
+                        <p>${formattedDate} at ${formattedTime}</p>
+                        <div class="divider"></div>
+                        <table>
+                          <thead>
+                            <tr style="border-bottom: 1px solid #000;">
+                              <th style="text-align: left; padding-bottom: 4px;">Item</th>
+                              <th style="text-align: right; padding-bottom: 4px;">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${itemsHtml}
+                          </tbody>
+                        </table>
+                        <div class="divider"></div>
+                        <p class="total">GRAND TOTAL: ₹${selectedOrderDetails.totalAmount.toFixed(2)}</p>
+                        <div class="divider"></div>
+                        <p class="footer">Thank you for dining with Namahaa!</p>
+                      </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="py-3 rounded-2xl bg-white/10 border border-white/20 text-white font-extrabold text-xs shadow-md hover:bg-white/20 transition flex items-center justify-center gap-1.5"
+                >
+                  <ClipboardList className="w-4 h-4 text-namaha-gold" />
+                  <span>Print Receipt</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderDetails(null)}
+                  className="py-3 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs shadow-md hover:bg-amber-400 transition"
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
         )}
 
       </div>
     </div>
+  );
+};
+
+class CartErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('Cart error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#023835] border border-namaha-gold/40 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <AlertCircle className="w-12 h-12 text-namaha-gold mx-auto" />
+            <h3 className="text-lg font-serif font-bold text-white">Cart Temporarily Refreshed</h3>
+            <p className="text-xs text-gray-300">
+              We updated your session data. Click below to continue browsing.
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false });
+                if (typeof window !== 'undefined') {
+                  try {
+                    localStorage.removeItem('namahaa_customer_cart_v2');
+                  } catch (e) {}
+                  window.location.reload();
+                }
+              }}
+              className="w-full py-3 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs shadow-lg hover:bg-amber-400 transition"
+            >
+              Refresh Menu & Cart
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const CartBottomSheet: React.FC = () => {
+  return (
+    <CartErrorBoundary>
+      <CartBottomSheetInner />
+    </CartErrorBoundary>
   );
 };
