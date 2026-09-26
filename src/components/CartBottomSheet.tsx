@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from '@/lib/cartContext';
 import {
   X,
@@ -56,6 +56,7 @@ const CartBottomSheetInner: React.FC = () => {
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const orderIdemKeyRef = useRef<string>('');
 
   // Secure Table Session Isolation
   const [sessionId, setSessionId] = useState<string>('');
@@ -199,7 +200,9 @@ const CartBottomSheetInner: React.FC = () => {
     setSubmissionError(null);
     setOrderSuccessConfirmation(null);
 
-    const idempotencyKey = `idem_${sessionId}_${selectedTable}_${Date.now()}`;
+    if (!orderIdemKeyRef.current) {
+      orderIdemKeyRef.current = `idem_${sessionId}_${selectedTable}_${Date.now()}`;
+    }
 
     const orderItems = cart.map(({ item, quantity }) => ({
       id: item.id,
@@ -218,10 +221,11 @@ const CartBottomSheetInner: React.FC = () => {
         customerName,
         notes: kitchenNotes,
         sessionId,
-        idempotencyKey,
+        idempotencyKey: orderIdemKeyRef.current,
       });
 
       if (result.success && result.order) {
+        orderIdemKeyRef.current = '';
         setPlacedOrder(result.order);
         setCustomerOrders((prev) => {
           const filtered = prev.filter((o) => o.id !== result.order!.id);
@@ -638,7 +642,16 @@ const CartBottomSheetInner: React.FC = () => {
           /* ======================================================== */
           /* 3. CHECKOUT & ORDER DETAILS SCREEN MODE                 */
           /* ======================================================== */
-          <div className="p-6 space-y-5 flex-1 overflow-y-auto">
+          <div className="relative p-6 space-y-5 flex-1 overflow-y-auto">
+            {isSubmittingOrder && (
+              <div className="absolute inset-0 z-40 bg-namaha-green-deep/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-namaha-gold to-amber-400 flex items-center justify-center shadow-2xl mb-3">
+                  <Loader2 className="w-7 h-7 text-namaha-green-deep animate-spin" />
+                </div>
+                <h3 className="text-base font-serif font-bold text-white">Sending Order to Kitchen...</h3>
+                <p className="text-xs text-amber-200/80 mt-1">Connecting Table #{selectedTable} with kitchen chefs</p>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <h3 className="text-base font-serif font-bold text-namaha-gold flex items-center gap-2">
                 <ChefHat className="w-5 h-5 text-amber-400" /> Confirm Kitchen Order

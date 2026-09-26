@@ -189,7 +189,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
 
   const clearCart = () => {
     setCart([]);
-    setIsCartOpen(false);
   };
 
   const getItemQuantity = (itemId: string): number => {
