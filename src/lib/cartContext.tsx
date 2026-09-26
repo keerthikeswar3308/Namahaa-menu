@@ -23,6 +23,8 @@ interface CartContextType {
   cartViewMode: 'cart' | 'orders';
   setCartViewMode: (mode: 'cart' | 'orders') => void;
   openOrders: () => void;
+  customerOrdersCount: number;
+  setCustomerOrdersCount: (count: number) => void;
   wishlist: MenuItem[];
   toggleWishlist: (item: MenuItem) => void;
   isInWishlist: (itemId: string) => boolean;
@@ -46,8 +48,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
   const [wishlist, setWishlist] = useState<MenuItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartViewMode, setCartViewMode] = useState<'cart' | 'orders'>('cart');
+  const [customerOrdersCount, setCustomerOrdersCount] = useState<number>(0);
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Sync customer active orders count from database for current customer session
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const fetchCount = async () => {
+      try {
+        const sessId = localStorage.getItem('namahaa_session_id') || localStorage.getItem('namahaa_device_session_id');
+        if (!sessId) {
+          setCustomerOrdersCount(0);
+          return;
+        }
+        const res = await fetch(`/api/orders/list?sessionId=${encodeURIComponent(sessId)}&t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.orders)) {
+            const active = data.orders.filter((o: any) => o && o.orderStatus !== 'cancelled');
+            setCustomerOrdersCount(active.length);
+          } else {
+            setCustomerOrdersCount(0);
+          }
+        }
+      } catch {
+        setCustomerOrdersCount(0);
+      }
+    };
+    fetchCount();
+  }, []);
 
   // Restore cart & wishlist on client mount and match against Supabase menu items
   useEffect(() => {
@@ -207,6 +237,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
           setCartViewMode('orders');
           setIsCartOpen(true);
         },
+        customerOrdersCount,
+        setCustomerOrdersCount,
         wishlist,
         toggleWishlist,
         isInWishlist,

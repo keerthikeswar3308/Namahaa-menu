@@ -25,9 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [restaurantName, setRestaurantName] = useState('Namahaa Tiffin Room');
   const { theme, toggleTheme } = useTheme();
-  const { wishlist, openWishlist, totalCount, openCart, openOrders } = useCart();
-
-  const [todayOrdersCount, setTodayOrdersCount] = useState(0);
+  const { wishlist, openWishlist, totalCount, openCart, openOrders, customerOrdersCount } = useCart();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -43,23 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     const info = NamahaStore.getRestaurantInfo();
     if (info.name) setRestaurantName(info.name);
 
-    const updateOrdersBadge = () => {
-      const orders = OrderStore.getOrders() || [];
-      const todayStr = getRestaurantBusinessDateStr();
-      const activeTodayCount = orders.filter(
-        (o) => o && o.createdAt && getRestaurantBusinessDateStr(o.createdAt) === todayStr && o.orderStatus !== 'cancelled'
-      ).length;
-      setTodayOrdersCount(activeTodayCount);
-    };
-
-    updateOrdersBadge();
-    window.addEventListener('namahaa_orders_updated', updateOrdersBadge);
-    window.addEventListener('storage', updateOrdersBadge);
-
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('namahaa_orders_updated', updateOrdersBadge);
-      window.removeEventListener('storage', updateOrdersBadge);
     };
   }, []);
 
@@ -156,9 +139,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 aria-label="View Placed Orders"
               >
                 <ClipboardList className="w-4 h-4" />
-                {todayOrdersCount > 0 && (
+                {customerOrdersCount > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-namaha-green-deep font-extrabold text-[9px] flex items-center justify-center shadow-xs leading-none">
-                    {todayOrdersCount}
+                    {customerOrdersCount}
                   </span>
                 )}
               </button>
@@ -234,9 +217,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <ClipboardList className="w-4 h-4 text-namaha-gold-warm dark:text-namaha-gold" />
               <span>Your Orders</span>
-              {todayOrdersCount > 0 && (
+              {customerOrdersCount > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-namaha-green-deep font-extrabold text-[10px]">
-                  {todayOrdersCount}
+                  {customerOrdersCount}
                 </span>
               )}
             </button>

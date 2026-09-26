@@ -42,6 +42,7 @@ const CartBottomSheetInner: React.FC = () => {
     isInWishlist,
     cartViewMode,
     setCartViewMode,
+    setCustomerOrdersCount,
   } = useCart();
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -153,6 +154,12 @@ const CartBottomSheetInner: React.FC = () => {
       };
     }
   }, [sessionId, selectedTable]);
+
+  // Keep shared orders badge count synchronized
+  useEffect(() => {
+    const active = customerOrders.filter((o) => o && o.orderStatus !== 'cancelled');
+    setCustomerOrdersCount(active.length);
+  }, [customerOrders, setCustomerOrdersCount]);
 
   // Lock background scroll when bottom sheet is open
   useEffect(() => {

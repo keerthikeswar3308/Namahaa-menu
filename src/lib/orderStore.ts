@@ -54,7 +54,11 @@ function notifyOrdersUpdated(): void {
 
 export class OrderStore {
   static getOrders(): Order[] {
-    return getStoredOrders();
+    if (typeof window === 'undefined') return [];
+    const sessId = localStorage.getItem('namahaa_session_id') || localStorage.getItem('namahaa_device_session_id');
+    const stored = getStoredOrders();
+    if (!sessId) return [];
+    return stored.filter((o) => o && o.sessionId === sessId);
   }
 
   // Fetch Live Orders for a target date (defaults to Today IST)
@@ -212,31 +216,21 @@ export class OrderStore {
   }
 
   static async fetchCustomerOrders(tableNumber?: number | null, sessionId?: string): Promise<Order[]> {
-    if (!sessionId) return getStoredOrders();
+    if (!sessionId) return [];
     try {
-      const url = `/api/orders/list?sessionId=${sessionId}&t=${Date.now()}`;
+      const url = `/api/orders/list?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`;
       const res = await fetch(url, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.orders)) {
-          const current = getStoredOrders();
-          const merged = [...current];
-          json.orders.forEach((newOrd: Order) => {
-            const idx = merged.findIndex((o) => o.id === newOrd.id);
-            if (idx !== -1) {
-              merged[idx] = newOrd;
-            } else {
-              merged.push(newOrd);
-            }
-          });
-          setStoredOrders(merged);
+          setStoredOrders(json.orders);
           return json.orders;
         }
       }
     } catch (err) {
       console.warn('fetchCustomerOrders error:', err);
     }
-    return getStoredOrders().filter((o) => !sessionId || o.sessionId === sessionId);
+    return getStoredOrders().filter((o) => o && o.sessionId === sessionId);
   }
 
   static subscribeToCustomerSessionOrders(sessionId: string, onOrderUpdate: (payload?: any) => void): () => void {
