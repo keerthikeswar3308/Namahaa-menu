@@ -124,10 +124,11 @@ export async function POST(request: NextRequest) {
         items: updatedItems,
         total_amount: updatedTotal,
         notes: combinedNotes,
+        order_status: 'pending', // Reset status to pending so kitchen & admin get chime & alert for newly added items
         updated_at: new Date().toISOString(),
       };
 
-      const { data: updatedDbOrder, error: updateErr } = await supabaseAdmin
+      let { data: updatedDbOrder, error: updateErr } = await supabaseAdmin
         .from('orders')
         .update(updatePayload)
         .eq('id', existingActiveOrder.id)
@@ -136,6 +137,32 @@ export async function POST(request: NextRequest) {
 
       if (updateErr) {
         console.warn('API /api/orders/create append update warning:', updateErr.message);
+        // Fallback update
+        const fallbackRes = await supabaseAdmin
+          .from('orders')
+          .update({
+            items: updatedItems,
+            total_amount: updatedTotal,
+            notes: combinedNotes,
+            order_status: 'pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingActiveOrder.id)
+          .select()
+          .single();
+
+        if (fallbackRes.data) {
+          updatedDbOrder = fallbackRes.data;
+          updateErr = null;
+        }
+      }
+
+      if (updateErr) {
+        console.error('API /api/orders/create DB append error:', updateErr.message);
+        return NextResponse.json(
+          { success: false, error: `Failed to update active order: ${updateErr.message}` },
+          { status: 500 }
+        );
       }
 
       // Insert new item snapshots for appended items into order_items
@@ -163,6 +190,8 @@ export async function POST(request: NextRequest) {
         items: updatedItems,
         total_amount: updatedTotal,
         notes: combinedNotes,
+        order_status: 'pending',
+        updated_at: new Date().toISOString(),
       };
 
       return NextResponse.json(
@@ -229,7 +258,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (error) {
-      console.warn('API /api/orders/create DB insert warning:', error.message);
+      console.error('API /api/orders/create DB insert error:', error.message);
+      return NextResponse.json(
+        { success: false, error: `Failed to create order in database: ${error.message}` },
+        { status: 500 }
+      );
     }
 
     const itemSnapshotsPayload = verifiedItems.map((item, idx) => ({

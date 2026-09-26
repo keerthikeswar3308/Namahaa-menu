@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
 import { verifyAdminRequest } from '@/lib/authServer';
+import { getBusinessDateBoundsISO } from '@/lib/businessDay';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
     // MODE 1: LIVE ORDERS (Date Specific, Defaults to TODAY IST)
     // -------------------------------------------------------------
     if (mode === 'live' || mode === 'daily_details') {
-      const { startISO, endISO } = getISTDateBounds(targetDate);
+      const { startISO, endISO } = getBusinessDateBoundsISO(targetDate);
       
       const { data: dbOrders, error } = await supabaseAdmin
         .from('orders')

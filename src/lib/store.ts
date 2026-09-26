@@ -807,6 +807,49 @@ export class NamahaStore {
     localStorage.removeItem(STORAGE_KEYS.TABLE_NUMBER);
     sessionStorage.removeItem('namahaa_table_session_date');
     localStorage.removeItem('namahaa_table_session_date');
+    sessionStorage.removeItem('namahaa_general_mode');
+    localStorage.removeItem('namahaa_general_mode');
+  }
+
+  static setGeneralMode(isGeneral: boolean): void {
+    if (typeof window === 'undefined') return;
+    if (isGeneral) {
+      this.clearSelectedTable();
+      sessionStorage.setItem('namahaa_general_mode', 'true');
+      localStorage.setItem('namahaa_general_mode', 'true');
+    } else {
+      sessionStorage.removeItem('namahaa_general_mode');
+      localStorage.removeItem('namahaa_general_mode');
+    }
+  }
+
+  static isGeneralMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return (
+      sessionStorage.getItem('namahaa_general_mode') === 'true' ||
+      localStorage.getItem('namahaa_general_mode') === 'true'
+    );
+  }
+
+  static setGroupCartJoined(tableNum: number, joined: boolean): void {
+    if (typeof window === 'undefined') return;
+    const key = `namahaa_group_joined_${tableNum}`;
+    if (joined) {
+      sessionStorage.setItem(key, 'true');
+      localStorage.setItem(key, 'true');
+    } else {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    }
+  }
+
+  static isGroupCartJoined(tableNum: number): boolean {
+    if (typeof window === 'undefined') return false;
+    const key = `namahaa_group_joined_${tableNum}`;
+    return (
+      sessionStorage.getItem(key) === 'true' ||
+      localStorage.getItem(key) === 'true'
+    );
   }
 
   // =========================================================================

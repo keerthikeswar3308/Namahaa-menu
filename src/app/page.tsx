@@ -19,11 +19,16 @@ import { CartProvider, useCart } from '@/lib/cartContext';
 import { FloatingCartBar } from '@/components/FloatingCartBar';
 import { CartBottomSheet } from '@/components/CartBottomSheet';
 import { WishlistModal } from '@/components/WishlistModal';
+import { GroupCartJoinModal } from '@/components/GroupCartJoinModal';
+import { TableOccupiedNoticeModal } from '@/components/TableOccupiedNoticeModal';
 import { Star, UtensilsCrossed } from 'lucide-react';
 
 function HomeContent() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
+  const [isGroupJoinModalOpen, setIsGroupJoinModalOpen] = useState(false);
+  const [isOccupiedNoticeOpen, setIsOccupiedNoticeOpen] = useState(false);
+  const [pendingTableNumber, setPendingTableNumber] = useState<number>(1);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(NamahaStore.getRestaurantInfo());
@@ -56,14 +61,48 @@ function HomeContent() {
       const sessionId = NamahaStore.getDeviceSessionId();
       
       let requestedTable: number | null = null;
+      let isGeneralQr = false;
+
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
+        const qParam = params.get('qr') || params.get('mode');
         const tParam = params.get('table') || params.get('table_number') || params.get('t');
-        if (tParam && !isNaN(parseInt(tParam, 10))) {
+
+        if (qParam === '13' || tParam === '0' || tParam === '13' || qParam === 'general') {
+          isGeneralQr = true;
+        } else if (tParam && !isNaN(parseInt(tParam, 10))) {
           const num = parseInt(tParam, 10);
           if (num >= 1 && num <= 12) {
             requestedTable = num;
           }
+        }
+      }
+
+      // Handle 13th General QR Mode (Zero Table Modals)
+      if (isGeneralQr || NamahaStore.isGeneralMode()) {
+        NamahaStore.setGeneralMode(true);
+        setSelectedTable(null);
+        setIsTableModalOpen(false);
+        setIsGroupJoinModalOpen(false);
+        setIsOccupiedNoticeOpen(false);
+        return;
+      }
+
+      // Check table occupation if requestedTable specified
+      if (requestedTable) {
+        try {
+          const sessionRes = await fetch(`/api/table/session?tableNumber=${requestedTable}&sessionId=${sessionId}`, { cache: 'no-store' });
+          if (sessionRes.ok) {
+            const sJson = await sessionRes.json();
+            if (sJson.success && sJson.isTableOccupied && !sJson.sessionBelongsToCurrentDevice && !NamahaStore.isGroupCartJoined(requestedTable)) {
+              setPendingTableNumber(requestedTable);
+              setIsGroupJoinModalOpen(true);
+              setIsTableModalOpen(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('Table session check error:', e);
         }
       }
 
@@ -76,6 +115,13 @@ function HomeContent() {
         if (res.ok) {
           const json = await res.json();
           if (json.success) {
+            if (json.isGeneralMode) {
+              NamahaStore.setGeneralMode(true);
+              setSelectedTable(null);
+              setIsTableModalOpen(false);
+              return;
+            }
+
             const serverDate = json.currentBusinessDate;
             const activeTable = requestedTable || json.tableNumber || NamahaStore.getSelectedTable(serverDate);
 
@@ -128,8 +174,31 @@ function HomeContent() {
   }, []);
 
   const handleTableSelected = (tableNum: number) => {
+    NamahaStore.setGeneralMode(false);
     NamahaStore.setSelectedTable(tableNum);
     setSelectedTable(tableNum);
+    setIsTableModalOpen(false);
+  };
+
+  const handleConfirmJoinGroup = () => {
+    NamahaStore.setGeneralMode(false);
+    NamahaStore.setGroupCartJoined(pendingTableNumber, true);
+    NamahaStore.setSelectedTable(pendingTableNumber);
+    setSelectedTable(pendingTableNumber);
+    setIsGroupJoinModalOpen(false);
+    setIsOccupiedNoticeOpen(false);
+  };
+
+  const handleSelectSeparate = () => {
+    setIsGroupJoinModalOpen(false);
+    setIsOccupiedNoticeOpen(true);
+  };
+
+  const handleBrowseGeneral = () => {
+    NamahaStore.setGeneralMode(true);
+    setSelectedTable(null);
+    setIsGroupJoinModalOpen(false);
+    setIsOccupiedNoticeOpen(false);
     setIsTableModalOpen(false);
   };
 
@@ -216,6 +285,24 @@ function HomeContent() {
         currentTable={selectedTable}
         onClose={() => setIsTableModalOpen(false)}
         onSelectTable={handleTableSelected}
+      />
+
+      {/* Group Cart Join Modal for Occupied Tables */}
+      <GroupCartJoinModal
+        isOpen={isGroupJoinModalOpen}
+        tableNumber={pendingTableNumber}
+        onJoinGroup={handleConfirmJoinGroup}
+        onSelectSeparate={handleSelectSeparate}
+        onClose={() => setIsGroupJoinModalOpen(false)}
+      />
+
+      {/* Table Occupied Notice Modal */}
+      <TableOccupiedNoticeModal
+        isOpen={isOccupiedNoticeOpen}
+        tableNumber={pendingTableNumber}
+        onJoinGroup={handleConfirmJoinGroup}
+        onBrowseGeneral={handleBrowseGeneral}
+        onClose={() => setIsOccupiedNoticeOpen(false)}
       />
 
       {/* 3. Hero Banner (Desktop Only - Mobile flows directly from Top Header into Categories & Menu) */}

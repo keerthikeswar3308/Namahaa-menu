@@ -124,7 +124,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF4E5] dark:bg-namaha-gold/20 border border-[#F9E7C1] dark:border-namaha-gold/40 text-[#B45309] dark:text-namaha-gold font-bold text-xs shadow-xs hover:scale-102 active:scale-95 transition"
             >
               <Utensils className="w-3.5 h-3.5" />
-              <span>{selectedTable ? `Table #${selectedTable}` : 'Select Table'}</span>
+              <span>{selectedTable ? `Table #${selectedTable}` : NamahaStore.isGeneralMode() ? '🌐 Takeaway' : 'Select Table'}</span>
             </button>
 
             {/* Right Quick Action Round Icons */}
@@ -202,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-namaha-gold/15 dark:bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold-amber dark:text-namaha-gold text-xs font-bold shadow-sm hover:scale-102 transition"
             >
               <Utensils className="w-3.5 h-3.5" />
-              <span>{selectedTable ? `Table #${selectedTable}` : 'Select Table'}</span>
+              <span>{selectedTable ? `Table #${selectedTable}` : NamahaStore.isGeneralMode() ? '🌐 Takeaway / General' : 'Select Table'}</span>
             </button>
 
             {/* Top Cart Button */}

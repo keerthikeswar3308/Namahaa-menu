@@ -911,8 +911,14 @@ export const OrdersManagement: React.FC = () => {
                       </h3>
                     </div>
 
-                    <div className="flex items-center gap-2 relative">
+                    <div className="flex items-center gap-2 relative flex-wrap justify-end">
                       {getStatusBadge(order.orderStatus)}
+
+                      {order.updatedAt && new Date(order.updatedAt).getTime() - new Date(order.createdAt).getTime() > 10000 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 flex items-center gap-1 animate-pulse" title={`Updated at ${new Date(order.updatedAt).toLocaleTimeString()}`}>
+                          ⚡ ITEMS ADDED
+                        </span>
+                      )}
 
                       {/* THREE-DOT BUTTON (⋮) */}
                       <div className="relative">

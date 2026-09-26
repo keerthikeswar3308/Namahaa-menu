@@ -10,9 +10,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
     const requestedTable = searchParams.get('tableNumber');
+    const isGeneralMode = searchParams.get('qr') === '13' || requestedTable === '0' || requestedTable === '13';
 
     const currentBusinessDate = getRestaurantBusinessDateStr();
     const { startISO, endISO } = getBusinessDateBoundsISO(currentBusinessDate);
+
+    if (isGeneralMode) {
+      return NextResponse.json({
+        success: true,
+        currentBusinessDate,
+        isGeneralMode: true,
+        isValidSameDaySession: false,
+        tableNumber: null,
+        activeOrders: [],
+      });
+    }
 
     if (!sessionId) {
       return NextResponse.json({
