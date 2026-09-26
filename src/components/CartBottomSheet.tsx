@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Loader2,
   Smartphone,
+  Eye,
 } from 'lucide-react';
 
 import { getFreshImageUrl } from '@/lib/imageUtils';
@@ -222,13 +223,6 @@ const CartBottomSheetInner: React.FC = () => {
         clearCart();
         setIsCheckoutOpen(false);
         setOrderSuccessConfirmation(result.order);
-
-        // Auto-close success popup after brief confirmation (1.4 seconds)
-        setTimeout(() => {
-          setOrderSuccessConfirmation(null);
-          closeCart();
-          setCartViewMode('orders');
-        }, 1400);
       } else {
         setSubmissionError(result.error || 'Unable to send your order. Please try again.');
       }
@@ -240,23 +234,40 @@ const CartBottomSheetInner: React.FC = () => {
     }
   };
 
+  const formatOrderDateTime = (dateStr?: string) => {
+    if (!dateStr) return 'Just now';
+    try {
+      const d = parseSafeDate(dateStr);
+      const todayStr = getRestaurantBusinessDateStr(new Date());
+      const orderDateStr = getRestaurantBusinessDateStr(d);
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (orderDateStr === todayStr) {
+        return `Today, ${timeStr}`;
+      }
+      return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeStr}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   const getOrderStatusDisplay = (status: OrderStatus) => {
     switch (status) {
       case 'pending':
-        return { label: 'Sent to Kitchen', desc: 'Kitchen is confirming your items...', color: 'text-amber-400', step: 1 };
+        return { label: 'Sent to Kitchen', desc: 'Kitchen is confirming your items...', color: 'text-amber-400', step: 1, icon: '🟡' };
       case 'accepted':
-        return { label: 'Order Accepted', desc: 'Kitchen accepted your order!', color: 'text-blue-400', step: 2 };
+        return { label: 'Order Accepted', desc: 'Kitchen accepted your order!', color: 'text-blue-400', step: 2, icon: '🔵' };
       case 'preparing':
-        return { label: 'Preparing', desc: 'Chef is cooking your tiffins fresh!', color: 'text-purple-400', step: 2 };
+        return { label: 'Preparing', desc: 'Chef is cooking your tiffins fresh!', color: 'text-purple-400', step: 3, icon: '🟣' };
       case 'ready':
+        return { label: 'Ready to Serve', desc: 'Dish is hot and ready!', color: 'text-teal-400', step: 4, icon: '🟢' };
       case 'served':
-        return { label: 'Ready to Serve', desc: 'Dish is hot and coming to your table!', color: 'text-teal-400', step: 3 };
+        return { label: 'Served', desc: 'Dishes served to your table. Enjoy!', color: 'text-emerald-400', step: 5, icon: '✅' };
       case 'completed':
-        return { label: 'Completed', desc: 'Enjoyed your tiffin? Visit again!', color: 'text-emerald-400', step: 4 };
+        return { label: 'Completed', desc: 'Enjoyed your tiffin? Visit again!', color: 'text-emerald-400', step: 5, icon: '✅' };
       case 'cancelled':
-        return { label: 'Cancelled', desc: 'This order was cancelled.', color: 'text-rose-400', step: 0 };
+        return { label: 'Cancelled', desc: 'This order was cancelled.', color: 'text-rose-400', step: 0, icon: '🔴' };
       default:
-        return { label: 'Order Placed', desc: 'Processing order...', color: 'text-amber-400', step: 1 };
+        return { label: 'Order Placed', desc: 'Processing order...', color: 'text-amber-400', step: 1, icon: '🟡' };
     }
   };
 
@@ -311,54 +322,71 @@ const CartBottomSheetInner: React.FC = () => {
         {/* Full Viewport Centered Overlay when Order is Successfully Sent */}
         {orderSuccessConfirmation && !isSubmittingOrder && (
           <div className="fixed inset-0 z-[100] bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fade-in my-auto overflow-y-auto">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 text-emerald-400 flex items-center justify-center shadow-lg flex-shrink-0">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 text-emerald-400 flex items-center justify-center shadow-lg flex-shrink-0 animate-bounce">
               <CheckCircle2 className="w-9 h-9" />
             </div>
 
             <div>
-              <div className="text-[10px] text-namaha-gold font-extrabold uppercase tracking-widest">SUCCESS</div>
-              <h3 className="text-xl font-serif font-bold text-white">ORDER SENT TO KITCHEN!</h3>
+              <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 block">
+                ✓ Order Placed Successfully
+              </span>
+              <h3 className="text-2xl font-serif font-bold text-white mt-1">
+                {orderSuccessConfirmation.orderNumber}
+              </h3>
+              <p className="text-xs text-gray-300 mt-1 font-medium max-w-xs">
+                Your order has been sent to the kitchen for Table #{orderSuccessConfirmation.tableNumber}.
+              </p>
             </div>
 
-            <div className="w-full max-w-xs bg-black/60 p-4 rounded-2xl border border-namaha-gold/30 text-xs space-y-1.5 text-left shadow-lg">
-              <div className="flex justify-between items-center">
+            <div className="w-full max-w-xs bg-black/60 p-4 rounded-2xl border border-namaha-gold/30 text-xs space-y-2 text-left shadow-lg">
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
                 <span className="font-extrabold text-white text-sm">{orderSuccessConfirmation.orderNumber}</span>
                 <span className="px-2.5 py-0.5 rounded-lg bg-namaha-gold/20 text-namaha-gold font-extrabold text-[11px]">Table #{orderSuccessConfirmation.tableNumber}</span>
               </div>
-              <div className="text-[11px] text-emerald-300 font-semibold">Kitchen received your items for preparation</div>
+              <div className="flex justify-between text-gray-300">
+                <span>Total Amount:</span>
+                <span className="font-serif font-bold text-namaha-gold text-sm">₹{orderSuccessConfirmation.totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-400 text-[11px]">
+                <span>Status:</span>
+                <span className="text-amber-400 font-semibold flex items-center gap-1">
+                  <span>🟡</span> Sent to Kitchen
+                </span>
+              </div>
             </div>
 
             <div className="w-full max-w-xs bg-black/40 p-3.5 rounded-2xl border border-white/10 text-xs text-left max-h-36 overflow-y-auto space-y-1">
-              <span className="text-[10px] font-extrabold text-namaha-gold uppercase block mb-1">Items Sent to Kitchen:</span>
+              <span className="text-[10px] font-extrabold text-namaha-gold uppercase block mb-1">Items Ordered:</span>
               {orderSuccessConfirmation.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-gray-300">
-                  <span>{item.quantity}× {item.name}</span>
+                <div key={idx} className="flex justify-between text-gray-300 py-0.5">
+                  <span>{item.quantity} × {item.name}</span>
                   <span className="font-semibold text-namaha-gold">₹{(item.price * item.quantity).toFixed(0)}</span>
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 w-full max-w-xs pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderSuccessConfirmation(null);
-                  closeCart();
-                }}
-                className="px-4 py-2.5 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs shadow-md hover:bg-amber-400 transition"
-              >
-                + ADD MORE ITEMS
-              </button>
-
+            <div className="flex flex-col gap-2.5 w-full max-w-xs pt-2">
               <button
                 type="button"
                 onClick={() => {
                   setOrderSuccessConfirmation(null);
                   setCartViewMode('orders');
                 }}
-                className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs border border-white/10 transition"
+                className="w-full py-3.5 px-4 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs sm:text-sm shadow-xl hover:bg-amber-400 transition flex items-center justify-center gap-2 active:scale-98"
               >
-                TODAY&apos;S ITEMS
+                <ClipboardList className="w-4 h-4" />
+                <span>View Your Orders</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderSuccessConfirmation(null);
+                  closeCart();
+                }}
+                className="w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-gray-300 font-bold text-xs transition"
+              >
+                + Order More Food
               </button>
             </div>
           </div>
@@ -373,7 +401,7 @@ const CartBottomSheetInner: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-serif font-bold text-namaha-gold">
-                {cartViewMode === 'orders' ? 'Items Added Today' : 'Your Table Cart'}
+                {cartViewMode === 'orders' ? 'Your Orders' : 'Your Table Cart'}
               </h2>
               {selectedTable && (
                 <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
@@ -389,17 +417,19 @@ const CartBottomSheetInner: React.FC = () => {
             {customerOrders.length > 0 && cartViewMode === 'cart' && (
               <button
                 onClick={() => setCartViewMode('orders')}
-                className="px-3 py-1.5 rounded-xl border border-namaha-gold/30 bg-namaha-gold/10 text-namaha-gold text-[10px] font-extrabold tracking-wider uppercase hover:bg-namaha-gold/20 transition"
+                className="px-3 py-1.5 rounded-xl border border-namaha-gold/30 bg-namaha-gold/10 text-namaha-gold text-[10px] font-extrabold tracking-wider uppercase hover:bg-namaha-gold/20 transition flex items-center gap-1"
               >
-                Today&apos;s Items ({customerOrders.length})
+                <ClipboardList className="w-3.5 h-3.5" />
+                <span>Your Orders ({customerOrders.length})</span>
               </button>
             )}
             {cartViewMode === 'orders' && cart.length > 0 && (
               <button
                 onClick={() => setCartViewMode('cart')}
-                className="px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px] font-extrabold tracking-wider uppercase hover:bg-emerald-500/20 transition"
+                className="px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px] font-extrabold tracking-wider uppercase hover:bg-emerald-500/20 transition flex items-center gap-1"
               >
-                View Cart ({cart.length})
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>View Cart ({cart.length})</span>
               </button>
             )}
             <button
@@ -415,161 +445,132 @@ const CartBottomSheetInner: React.FC = () => {
         {/* View Mode Switching rendering logic */}
         {cartViewMode === 'orders' ? (
           /* ======================================================== */
-          /* 1. CUSTOMER ITEMS ADDED TODAY VIEW MODE                  */
+          /* 1. CUSTOMER "YOUR ORDERS" VIEW MODE                      */
           /* ======================================================== */
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <span className="text-xs uppercase font-extrabold tracking-wider text-namaha-gold block">
-                  Your Today&apos;s Orders & Dishes
-                </span>
-                <span className="text-[10px] text-gray-400 font-medium block">
-                  All active items ordered from this device today
+                <h3 className="text-sm uppercase font-extrabold tracking-wider text-namaha-gold flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-amber-400" />
+                  <span>YOUR ORDERS</span>
+                </h3>
+                <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
+                  Live orders placed from Table #{selectedTable || 1}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleManualRefresh}
                 disabled={isManualRefreshing}
-                className="flex items-center gap-1.5 text-[11px] text-namaha-gold font-bold hover:underline active:scale-95 transition disabled:opacity-70"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] text-namaha-gold font-bold hover:bg-white/10 active:scale-95 transition disabled:opacity-70 shadow-sm"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isManualRefreshing ? 'animate-spin' : ''}`} />
                 <span>{isManualRefreshing ? 'Refreshing...' : 'Refresh'}</span>
               </button>
             </div>
 
-            {customerOrders.length > 0 ? (
-              (() => {
-                const todayBusinessDayStr = getRestaurantBusinessDateStr(new Date());
+            {customerOrders && customerOrders.length > 0 ? (
+              <div className="space-y-4 pb-6">
+                {customerOrders
+                  .slice()
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map((order) => {
+                    if (!order) return null;
+                    const ordId = order.id;
+                    const ordNum = order.orderNumber || `#ORD-${String(ordId).slice(-6)}`;
+                    const tblNum = order.tableNumber || selectedTable || 1;
+                    const itemsArr = Array.isArray(order.items) ? order.items : [];
+                    const statusInfo = getOrderStatusDisplay(order.orderStatus);
 
-                // Filter orders belonging to today's business day
-                const todayOrders = (customerOrders || []).filter((o) => {
-                  if (!o || !o.createdAt) return false;
-                  return getRestaurantBusinessDateStr(parseSafeDate(o.createdAt)) === todayBusinessDayStr && o.orderStatus !== 'cancelled';
-                });
-
-                // Aggregate items added today
-                const itemsAddedTodayMap = new Map<string, { id: string; name: string; price: number; quantity: number; image?: string }>();
-                let totalTodayAmount = 0;
-                let totalTodayUnits = 0;
-
-                todayOrders.forEach((ord) => {
-                  if (!ord) return;
-                  totalTodayAmount += Number(ord.totalAmount || 0);
-                  (ord.items || []).forEach((item: any) => {
-                    if (!item) return;
-                    const key = String(item.id || item.name || 'item');
-                    const qty = Number(item.quantity || 1);
-                    const price = Number(item.price || 0);
-                    totalTodayUnits += qty;
-
-                    if (!itemsAddedTodayMap.has(key)) {
-                      itemsAddedTodayMap.set(key, {
-                        id: key,
-                        name: item.name || 'Dish Item',
-                        price,
-                        quantity: qty,
-                        image: item.image,
-                      });
-                    } else {
-                      const existing = itemsAddedTodayMap.get(key);
-                      if (existing) {
-                        existing.quantity += qty;
-                      }
-                    }
-                  });
-                });
-
-                const aggregatedItems = Array.from(itemsAddedTodayMap.values());
-
-                return (
-                  <div className="space-y-6 pb-6">
-                    {/* SUMMARY KPI CARD FOR TODAY'S ITEMS */}
-                    <div className="p-5 rounded-3xl bg-black/50 border border-namaha-gold/30 space-y-4 shadow-xl">
-                      <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                        <div>
-                          <span className="text-[10px] text-namaha-gold font-extrabold uppercase tracking-widest block">TABLE #{selectedTable || 1} SUMMARY</span>
-                          <h4 className="font-bold text-base text-white">{totalTodayUnits} Item(s) Added Today</h4>
+                    return (
+                      <div
+                        key={ordId}
+                        className="p-5 rounded-3xl bg-black/50 border border-namaha-gold/30 shadow-xl space-y-3.5 text-xs transition hover:border-namaha-gold/60"
+                      >
+                        {/* Order Header: Order #, Table No., Time, Payment Status */}
+                        <div className="flex items-start justify-between border-b border-white/10 pb-3 gap-2">
+                          <div>
+                            <h4 className="text-base font-serif font-extrabold text-white tracking-wide">
+                              {ordNum}
+                            </h4>
+                            <p className="text-xs text-gray-300 font-semibold mt-0.5">
+                              Table No. {tblNum} • {formatOrderDateTime(order.createdAt)}
+                            </p>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 flex-shrink-0">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>✓ Payment Successful</span>
+                          </span>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[10px] text-gray-400 block uppercase font-bold">Total Bill Value</span>
-                          <span className="text-xl font-serif font-extrabold text-namaha-gold">₹{totalTodayAmount.toFixed(2)}</span>
-                        </div>
-                      </div>
 
-                      {/* Itemized List */}
-                      {aggregatedItems.length > 0 ? (
-                        <div className="space-y-2">
-                          <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block mb-1">ALL DISHES ADDED TODAY:</span>
-                          {aggregatedItems.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-xs p-2.5 rounded-2xl bg-white/5 border border-white/5">
-                              <div className="flex items-center gap-2.5">
-                                <span className="w-6 h-6 rounded-lg bg-namaha-gold/20 text-namaha-gold font-extrabold text-xs flex items-center justify-center flex-shrink-0">
-                                  {item.quantity}×
+                        {/* Items List */}
+                        <div className="space-y-2 py-1">
+                          {itemsArr.map((item: any, idx: number) => {
+                            const qty = Number(item.quantity || 1);
+                            const price = Number(item.price || 0);
+                            const itemTotal = price * qty;
+                            return (
+                              <div key={idx} className="flex justify-between items-center text-gray-200">
+                                <span className="font-medium text-xs">
+                                  <strong className="text-namaha-gold font-extrabold mr-2">{qty} ×</strong>
+                                  {item.name}
                                 </span>
-                                <span className="font-bold text-white">{item.name}</span>
-                              </div>
-                              <span className="font-semibold text-namaha-gold">₹{(item.price * item.quantity).toFixed(0)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-400 italic">No active items added today.</p>
-                      )}
-                    </div>
-
-                    {/* SUBMITTED ORDERS RECEIPTS LIST */}
-                    <div className="space-y-3">
-                      <span className="text-[10px] uppercase font-extrabold tracking-wider text-gray-400 block">
-                        Submitted Orders Receipts ({todayOrders.length})
-                      </span>
-
-                      {todayOrders.map((order) => {
-                        if (!order) return null;
-                        const ordId = order.id || `ord_${Math.random()}`;
-                        const ordNum = order.orderNumber || `#ORD-${String(ordId).slice(-6)}`;
-                        const tblNum = order.tableNumber || 1;
-                        const itemsCnt = Array.isArray(order.items) ? order.items.length : 0;
-
-                        return (
-                          <div
-                            key={ordId}
-                            className="p-4 rounded-2xl bg-black/30 border border-white/10 space-y-2 text-xs"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <h5 className="font-bold text-white text-sm">{ordNum}</h5>
-                                <span className="px-2 py-0.5 rounded bg-namaha-gold/20 text-namaha-gold text-[10px] font-extrabold">
-                                  Table #{tblNum}
+                                <span className="font-bold text-gray-100">
+                                  ₹{itemTotal.toFixed(0)}
                                 </span>
                               </div>
-                              <span className="text-[10px] text-gray-400">
-                                {parseSafeDate(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            );
+                          })}
+                        </div>
+
+                        {/* Order Total & Status */}
+                        <div className="flex items-center justify-between pt-2.5 border-t border-white/10">
+                          <div>
+                            <span className="text-[10px] text-gray-400 uppercase font-bold block">Order Total</span>
+                            <span className="text-base font-serif font-extrabold text-namaha-gold">
+                              ₹{Number(order.totalAmount || 0).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-gray-400 uppercase font-bold block">Status</span>
+                            <div className="flex items-center gap-1.5 mt-0.5 justify-end">
+                              <span className="text-sm">{statusInfo.icon}</span>
+                              <span className={`font-bold capitalize text-xs ${statusInfo.color}`}>
+                                {statusInfo.label}
                               </span>
                             </div>
-
-                            <div className="flex items-center justify-between text-gray-300 pt-1 border-t border-white/5">
-                              <span>{itemsCnt} item(s)</span>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedOrderDetails(order)}
-                                className="px-2.5 py-1 rounded-xl bg-namaha-gold/15 hover:bg-namaha-gold/25 text-namaha-gold border border-namaha-gold/30 text-xs font-bold transition"
-                              >
-                                View Receipt
-                              </button>
-                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()
+                        </div>
+
+                        {/* View Order Details Button */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrderDetails(order)}
+                          className="w-full py-2.5 rounded-2xl bg-namaha-gold/15 hover:bg-namaha-gold/25 text-namaha-gold border border-namaha-gold/40 text-xs font-bold transition flex items-center justify-center gap-2 active:scale-98 shadow-sm"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>View Order Details</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
             ) : (
-              <div className="py-12 text-center text-gray-400 space-y-3 bg-black/20 rounded-3xl border border-white/5">
-                <ChefHat className="w-12 h-12 mx-auto text-gray-600 opacity-50" />
-                <p className="text-sm font-semibold text-gray-200">No items added today</p>
-                <p className="text-xs text-gray-400">Items added to your table will appear here.</p>
+              <div className="py-16 text-center text-gray-400 space-y-3 bg-black/20 rounded-3xl border border-white/5 my-auto">
+                <ChefHat className="w-12 h-12 mx-auto text-gray-600 opacity-60" />
+                <h4 className="text-base font-serif font-bold text-gray-200">No Orders Placed Yet</h4>
+                <p className="text-xs text-gray-400 max-w-xs mx-auto">
+                  When you send an order to the kitchen, it will appear here so you can track its live preparation status.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCart();
+                  }}
+                  className="mt-3 px-5 py-2.5 rounded-2xl bg-namaha-gold text-namaha-green-deep font-extrabold text-xs shadow-md hover:bg-amber-400 transition"
+                >
+                  Explore Food Menu
+                </button>
               </div>
             )}
           </div>
@@ -945,6 +946,17 @@ const CartBottomSheetInner: React.FC = () => {
                       />
                     ))}
                   </div>
+                </div>
+
+                {/* Payment Status */}
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-xs">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Payment Status:</span>
+                  </div>
+                  <span className="font-bold text-emerald-300">
+                    ✓ Payment Successful
+                  </span>
                 </div>
 
                 {/* Items Breakdown Table */}

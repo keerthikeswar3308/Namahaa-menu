@@ -86,140 +86,7 @@ export async function POST(request: NextRequest) {
     });
 
 
-    // 3. Server-side Active Order Boundary Check (SAME DEVICE + SAME TABLE + CURRENT BUSINESS DAY)
-    const currentBusinessDate = getRestaurantBusinessDateStr();
-    const { startISO, endISO } = getBusinessDateBoundsISO(currentBusinessDate);
-
-    let existingActiveOrder: any = null;
-    if (tableNumber && sessionId) {
-      const { data: foundOrder } = await supabaseAdmin
-        .from('orders')
-        .select('*')
-        .eq('table_number', Number(tableNumber))
-        .eq('session_id', sessionId)
-        .gte('created_at', startISO)
-        .lte('created_at', endISO)
-        .in('order_status', ['pending', 'accepted', 'preparing', 'ready', 'served'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (foundOrder) {
-        existingActiveOrder = foundOrder;
-      }
-    }
-
-    // IF AN ACTIVE ORDER FOR TODAY'S BUSINESS DAY EXISTS → APPEND ITEMS TO IT
-    if (existingActiveOrder) {
-      const existingItems = Array.isArray(existingActiveOrder.items) ? existingActiveOrder.items : [];
-      const updatedItems = [...existingItems, ...verifiedItems];
-      const updatedTotal = Number(existingActiveOrder.total_amount || 0) + verifiedTotal;
-      const combinedNotes = notes
-        ? existingActiveOrder.notes
-          ? `${existingActiveOrder.notes} | ${notes}`
-          : notes
-        : existingActiveOrder.notes || '';
-
-      const updatePayload = {
-        items: updatedItems,
-        total_amount: updatedTotal,
-        notes: combinedNotes,
-        order_status: 'pending', // Reset status to pending so kitchen & admin get chime & alert for newly added items
-        updated_at: new Date().toISOString(),
-      };
-
-      let { data: updatedDbOrder, error: updateErr } = await supabaseAdmin
-        .from('orders')
-        .update(updatePayload)
-        .eq('id', existingActiveOrder.id)
-        .select()
-        .single();
-
-      if (updateErr) {
-        console.warn('API /api/orders/create append update warning:', updateErr.message);
-        // Fallback update
-        const fallbackRes = await supabaseAdmin
-          .from('orders')
-          .update({
-            items: updatedItems,
-            total_amount: updatedTotal,
-            notes: combinedNotes,
-            order_status: 'pending',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingActiveOrder.id)
-          .select()
-          .single();
-
-        if (fallbackRes.data) {
-          updatedDbOrder = fallbackRes.data;
-          updateErr = null;
-        }
-      }
-
-      if (updateErr) {
-        console.error('API /api/orders/create DB append error:', updateErr.message);
-        return NextResponse.json(
-          { success: false, error: `Failed to update active order: ${updateErr.message}` },
-          { status: 500 }
-        );
-      }
-
-      // Insert new item snapshots for appended items into order_items
-      const itemSnapshotsPayload = verifiedItems.map((item, idx) => ({
-        id: `oi-${existingActiveOrder.id}-${existingItems.length + idx + 1}`,
-        order_id: existingActiveOrder.id,
-        menu_item_id: item.id,
-        item_name_snapshot: item.name,
-        unit_price_snapshot: item.price,
-        quantity: item.quantity,
-        line_total: item.price * item.quantity,
-        special_instructions: item.notes || notes || '',
-      }));
-
-      (async () => {
-        try {
-          await supabaseAdmin.from('order_items').insert(itemSnapshotsPayload);
-        } catch (oiErr) {
-          console.warn('Order items insert exception:', oiErr);
-        }
-      })();
-
-      const finalOrderData = updatedDbOrder || {
-        ...existingActiveOrder,
-        items: updatedItems,
-        total_amount: updatedTotal,
-        notes: combinedNotes,
-        order_status: 'pending',
-        updated_at: new Date().toISOString(),
-      };
-
-      return NextResponse.json(
-        {
-          success: true,
-          order: {
-            id: finalOrderData.id,
-            orderNumber: finalOrderData.order_number,
-            tableNumber: Number(finalOrderData.table_number),
-            items: finalOrderData.items,
-            totalAmount: Number(finalOrderData.total_amount),
-            orderStatus: finalOrderData.order_status,
-            customerName: finalOrderData.customer_name || '',
-            customerPhone: finalOrderData.customer_phone || '',
-            notes: finalOrderData.notes || '',
-            sessionId: finalOrderData.session_id,
-            idempotencyKey: finalOrderData.idempotency_key,
-            createdAt: finalOrderData.created_at,
-            updatedAt: finalOrderData.updated_at,
-          },
-          message: `Added new items to active order ${finalOrderData.order_number}`,
-        },
-        { status: 200 }
-      );
-    }
-
-    // 4. NO ACTIVE ORDER FOR TODAY'S BUSINESS DAY EXISTS → CREATE NEW ORDER (#ORD-XXXX)
-
+    // 3. CREATE PERSISTENT COMPLETE ORDER IN SUPABASE (#ORD-XXXX)
     const timestamp = Date.now().toString().slice(-4);
     const randomNum = Math.floor(10 + Math.random() * 90);
     const orderNumber = `#ORD-${timestamp}${randomNum}`;
@@ -231,6 +98,8 @@ export async function POST(request: NextRequest) {
       table_number: Number(tableNumber),
       items: verifiedItems,
       total_amount: Number(verifiedTotal),
+      payment_method: 'counter',
+      payment_status: 'successful',
       order_status: 'pending',
       customer_name: customerName || '',
       customer_phone: customerPhone || '',
@@ -291,7 +160,10 @@ export async function POST(request: NextRequest) {
       orderNumber,
       tableNumber: Number(tableNumber),
       items: verifiedItems,
+      subtotalAmount: Number(verifiedTotal),
       totalAmount: Number(verifiedTotal),
+      paymentMethod: 'counter',
+      paymentStatus: 'successful',
       orderStatus: 'pending',
       customerName: customerName || '',
       customerPhone: customerPhone || '',
@@ -299,6 +171,7 @@ export async function POST(request: NextRequest) {
       sessionId: newOrderPayload.session_id,
       idempotencyKey: effectiveIdempotencyKey,
       createdAt: newOrderPayload.created_at,
+      updatedAt: newOrderPayload.updated_at,
     };
 
     return NextResponse.json(
