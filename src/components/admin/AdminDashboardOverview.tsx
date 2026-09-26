@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Category, MenuItem, RestaurantInfo } from '@/types';
-import { Utensils, CheckCircle, AlertTriangle, Star, FolderTree, Power, Sparkles, Plus, FileUp, RefreshCw, Bot, QrCode } from 'lucide-react';
+import { Utensils, CheckCircle, AlertTriangle, Star, FolderTree, Power, Sparkles, Plus, FileUp, RefreshCw, Bot, Bell } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
 
 interface AdminDashboardOverviewProps {
@@ -42,7 +42,7 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
               Restaurant Status: <span className={info.isRestaurantOpen ? 'text-emerald-400' : 'text-red-400'}>{info.isRestaurantOpen ? 'OPEN FOR ORDERS' : 'CLOSED NOW'}</span>
             </h2>
             <p className="text-xs text-gray-300 mt-1">
-              Controls live badge visibility on QR digital menu system.
+              Controls live badge visibility on digital menu system.
             </p>
           </div>
         </div>
@@ -138,16 +138,16 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
           </button>
 
           <button
-            onClick={() => onNavigateTab('qrcodes')}
+            onClick={() => onNavigateTab('orders')}
             className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/20 via-emerald-600/30 to-emerald-700/20 hover:from-emerald-500/30 hover:to-emerald-600/40 border-2 border-emerald-500/60 text-left transition flex items-center justify-between group shadow-lg"
           >
             <div>
               <span className="text-sm font-bold text-emerald-300 block flex items-center gap-1.5">
-                📱 Table & General QRs
+                🔔 Live Kitchen Orders
               </span>
-              <span className="text-xs text-emerald-200/90">View & print all 13 QR posters</span>
+              <span className="text-xs text-emerald-200/90">View & manage live orders</span>
             </div>
-            <QrCode className="w-6 h-6 text-emerald-400 group-hover:scale-125 transition-transform" />
+            <Bell className="w-6 h-6 text-emerald-400 group-hover:scale-125 transition-transform" />
           </button>
 
           <button
