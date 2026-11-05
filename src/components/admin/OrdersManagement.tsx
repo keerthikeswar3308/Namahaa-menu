@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 
 import { ThermalPrinterModal } from './ThermalPrinterModal';
+import { playKitchenChime, initAudioUnlock } from '@/lib/orderSound';
 
 export const OrdersManagement: React.FC = () => {
   const [printModalState, setPrintModalState] = useState<{ order: Order; type: 'kot' | 'bill' } | null>(null);
@@ -65,7 +66,12 @@ export const OrdersManagement: React.FC = () => {
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [lastOrderCount, setLastOrderCount] = useState<number>(0);
+  const seenOrderIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef<boolean>(true);
+  const [newOrderAlert, setNewOrderAlert] = useState<{
+    orderNumber: string;
+    tableNumber: number;
+  } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [processingOrderIds, setProcessingOrderIds] = useState<Set<string>>(new Set());
@@ -152,27 +158,10 @@ export const OrdersManagement: React.FC = () => {
     fetchMenu();
   }, []);
 
-  const playChime = () => {
-    try {
-      if (typeof window === 'undefined' || !soundEnabled) return;
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.5);
-    } catch (e) {
-      console.warn('Audio chime error:', e);
-    }
-  };
+  // Initialize Audio Context Autoplay Unlock on page interaction
+  useEffect(() => {
+    initAudioUnlock();
+  }, []);
 
   const loadDateOrders = async (dateStr: string) => {
     setIsRefreshing(true);
@@ -187,11 +176,38 @@ export const OrdersManagement: React.FC = () => {
       }
 
       if (dateStr === todayIST) {
-        const pendingCount = data.orders.filter((o) => o.orderStatus === 'pending').length;
-        if (pendingCount > lastOrderCount && lastOrderCount !== 0) {
-          playChime();
+        const currentOrderIds = new Set(data.orders.map((o) => o.id));
+
+        if (isInitialLoadRef.current) {
+          // First load: memorize existing order IDs without alerting
+          seenOrderIdsRef.current = currentOrderIds;
+          isInitialLoadRef.current = false;
+        } else {
+          // Detect newly arrived kitchen orders
+          let hasNewOrder = false;
+          let newestOrderNumber = '';
+          let newestTableNumber = 0;
+
+          for (const order of data.orders) {
+            if (!seenOrderIdsRef.current.has(order.id)) {
+              seenOrderIdsRef.current.add(order.id);
+              hasNewOrder = true;
+              newestOrderNumber = order.orderNumber;
+              newestTableNumber = order.tableNumber;
+            }
+          }
+
+          if (hasNewOrder) {
+            if (soundEnabled) {
+              playKitchenChime();
+            }
+            setNewOrderAlert({
+              orderNumber: newestOrderNumber,
+              tableNumber: newestTableNumber,
+            });
+            setTimeout(() => setNewOrderAlert(null), 10000);
+          }
         }
-        setLastOrderCount(pendingCount);
       }
     } catch (err: any) {
       console.error('Error fetching date orders:', err);
@@ -780,6 +796,29 @@ export const OrdersManagement: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Real-time Order Alert Notification Banner */}
+      {newOrderAlert && (
+        <div className="fixed top-20 right-4 sm:right-8 z-50 p-4 rounded-3xl bg-amber-500 text-namaha-green-deep border-2 border-white shadow-2xl flex items-center gap-3 animate-bounce">
+          <div className="p-2.5 rounded-full bg-namaha-green-deep text-namaha-gold">
+            <Bell className="w-5 h-5 animate-pulse" />
+          </div>
+          <div>
+            <div className="text-[11px] font-extrabold uppercase tracking-wider text-namaha-green-deep/90">
+              🔔 New Kitchen Order!
+            </div>
+            <div className="text-sm font-bold font-serif">
+              {newOrderAlert.orderNumber} • Table #{newOrderAlert.tableNumber}
+            </div>
+          </div>
+          <button
+            onClick={() => setNewOrderAlert(null)}
+            className="p-1 rounded-full hover:bg-black/10 text-namaha-green-deep ml-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* HEADER BAR */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-namaha-green-deep p-6 rounded-3xl border border-emerald-950/10 dark:border-namaha-gold/20 shadow-xl">
         <div>
@@ -822,17 +861,24 @@ export const OrdersManagement: React.FC = () => {
             </button>
           </div>
 
-          {/* Sound Toggle */}
+          {/* Sound Alert Toggle & Test */}
           <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2.5 rounded-2xl border transition ${
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              if (next) {
+                playKitchenChime();
+              }
+            }}
+            className={`px-3 py-2 rounded-2xl border transition flex items-center gap-1.5 text-xs font-bold ${
               soundEnabled
-                ? 'bg-amber-500/10 text-amber-600 dark:text-namaha-gold border-amber-500/30'
-                : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+                ? 'bg-amber-500/20 text-amber-500 dark:text-namaha-gold border-amber-500/40 shadow-sm'
+                : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
             }`}
-            title={soundEnabled ? 'Chime sound active' : 'Chime sound muted'}
+            title={soundEnabled ? 'Kitchen order alert sound ON (click to test chime or mute)' : 'Sound is muted (click to turn ON)'}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-500 dark:text-namaha-gold animate-pulse" /> : <VolumeX className="w-4 h-4" />}
+            <span className="hidden sm:inline">{soundEnabled ? 'Alert Sound ON' : 'Sound Muted'}</span>
           </button>
 
           {/* Refresh */}

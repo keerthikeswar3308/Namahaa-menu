@@ -19,6 +19,9 @@ import { ParsedImportResult } from '@/lib/docxParser';
 import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut, ExternalLink, ShieldCheck, RefreshCw, Bot, Bell, History, BarChart3 } from 'lucide-react';
 
 
+import { OrderStore } from '@/lib/orderStore';
+import { initAudioUnlock, playKitchenChime } from '@/lib/orderSound';
+
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -35,6 +38,13 @@ export default function AdminPage() {
   useEffect(() => {
     setIsAuthenticated(NamahaStore.isAdminLoggedIn());
     loadAllData();
+    initAudioUnlock();
+
+    // Global real-time order arrival sound alert for admin
+    const unsubscribe = OrderStore.subscribeToLiveOrders(() => {
+      playKitchenChime();
+    });
+    return () => unsubscribe();
   }, []);
 
   const loadAllData = async () => {
