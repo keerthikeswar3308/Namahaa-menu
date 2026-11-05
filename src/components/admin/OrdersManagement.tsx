@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 
 import { ThermalPrinterModal } from './ThermalPrinterModal';
-import { playKitchenChime, initAudioUnlock, unlockAudioAndPlay, isAudioReady } from '@/lib/orderSound';
+import { playKitchenChime, initAudioUnlock } from '@/lib/orderSound';
 
 export const OrdersManagement: React.FC = () => {
   const [printModalState, setPrintModalState] = useState<{ order: Order; type: 'kot' | 'bill' } | null>(null);
@@ -66,7 +66,6 @@ export const OrdersManagement: React.FC = () => {
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [audioActive, setAudioActive] = useState<boolean>(false);
   const seenOrderIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef<boolean>(true);
   const [newOrderAlert, setNewOrderAlert] = useState<{
@@ -162,26 +161,10 @@ export const OrdersManagement: React.FC = () => {
   // Initialize Audio Context Autoplay Unlock on page interaction
   useEffect(() => {
     initAudioUnlock();
-    setAudioActive(isAudioReady());
-
-    const handleUnlocked = () => {
-      setAudioActive(true);
-    };
-    window.addEventListener('namaha_audio_unlocked', handleUnlocked);
-    return () => {
-      window.removeEventListener('namaha_audio_unlocked', handleUnlocked);
-    };
   }, []);
-
-  const handleActivateAndTestSound = async () => {
-    await unlockAudioAndPlay();
-    setAudioActive(true);
-    setSoundEnabled(true);
-  };
 
   const handleTestChime = () => {
     playKitchenChime();
-    setAudioActive(true);
   };
 
   const handleToggleSound = () => {
@@ -189,7 +172,6 @@ export const OrdersManagement: React.FC = () => {
     setSoundEnabled(next);
     if (next) {
       playKitchenChime();
-      setAudioActive(true);
     }
   };
 
@@ -870,74 +852,6 @@ export const OrdersManagement: React.FC = () => {
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
-      )}
-
-      {/* Audio Setup / Status Banner */}
-      {!audioActive ? (
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/20 via-namaha-gold/15 to-amber-500/10 border-2 border-amber-500/50 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-namaha-green-deep flex items-center justify-center font-bold text-2xl shadow-md shrink-0">
-              🔔
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-namaha-gold tracking-tight">
-                  Turn On Kitchen Order Sound Alert
-                </h3>
-                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500 text-namaha-green-deep">
-                  1-Tap Setup
-                </span>
-              </div>
-              <p className="text-xs text-slate-700 dark:text-gray-300 mt-0.5">
-                Modern browsers require one tap to allow audio alerts. Tap &ldquo;Test &amp; Activate Sound&rdquo; to test the loud bell chime and enable real-time alerts.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleActivateAndTestSound}
-            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 text-namaha-green-deep font-black text-xs sm:text-sm shadow-xl shadow-amber-500/20 transition flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
-          >
-            <Volume2 className="w-5 h-5 text-namaha-green-deep animate-pulse" />
-            <span>Test &amp; Activate Sound 🔔</span>
-          </button>
-        </div>
-      ) : (
-        <div className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-3 w-3 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-            <span className="font-extrabold text-emerald-700 dark:text-emerald-300">
-              ✓ Kitchen Order Sound Alert Active
-            </span>
-            <span className="text-slate-500 dark:text-gray-400 text-[11px] hidden md:inline">
-              • Device will chime loudly when new customer orders arrive
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleTestChime}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-namaha-gold border border-amber-500/40 font-bold transition flex items-center gap-1.5 active:scale-95 text-xs cursor-pointer"
-              title="Play loud test chime"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span>Test Bell Chime</span>
-            </button>
-            <button
-              onClick={handleToggleSound}
-              className={`px-3 py-1.5 rounded-xl border font-bold transition flex items-center gap-1.5 active:scale-95 text-xs cursor-pointer ${
-                soundEnabled
-                  ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
-                  : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-              }`}
-              title={soundEnabled ? 'Mute Alert Sound' : 'Unmute Alert Sound'}
-            >
-              {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              <span>{soundEnabled ? 'Loud Alert ON' : 'Muted'}</span>
-            </button>
-          </div>
         </div>
       )}
 
