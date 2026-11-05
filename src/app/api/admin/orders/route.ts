@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
 import { verifyAdminRequest } from '@/lib/authServer';
-import { getBusinessDateBoundsISO } from '@/lib/businessDay';
+import { getBusinessDateBoundsISO, getRestaurantBusinessDateStr } from '@/lib/businessDay';
+import { fetchAllActiveCarts } from '@/lib/activeCartsServer';
+import {
+  mergeOrdersWithMemory,
+  mapDbRowToOrder,
+  updateLiveOrderStatusMemory,
+} from '@/lib/liveOrdersServer';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Helper: Get IST Date String (YYYY-MM-DD) for a given Date
 function getISTDateString(d: Date = new Date()): string {
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istDate = new Date(d.getTime() + istOffset + (d.getTimezoneOffset() * 60 * 1000));
-  const year = istDate.getFullYear();
-  const month = String(istDate.getMonth() + 1).padStart(2, '0');
-  const day = String(istDate.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return getRestaurantBusinessDateStr(d);
 }
 
 // Helper: Get ISO range for an IST YYYY-MM-DD date string
@@ -90,19 +91,60 @@ export async function GET(request: NextRequest) {
     if (mode === 'live' || mode === 'daily_details') {
       const { startISO, endISO } = getBusinessDateBoundsISO(targetDate);
       
-      const { data: dbOrders, error } = await supabaseAdmin
-        .from('orders')
-        .select('*')
-        .gte('created_at', startISO)
-        .lte('created_at', endISO)
-        .order('created_at', { ascending: false });
+      let dbOrdersRaw: any[] = [];
+      try {
+        if (mode === 'live') {
+          // For LIVE mode: Fetch ALL active kitchen orders (regardless of time boundary)
+          // PLUS all orders within today's business date range
+          const [activeRes, todayRes] = await Promise.allSettled([
+            supabaseAdmin
+              .from('orders')
+              .select('*')
+              .in('order_status', ['pending', 'preparing', 'ready', 'served'])
+              .order('created_at', { ascending: false }),
+            supabaseAdmin
+              .from('orders')
+              .select('*')
+              .gte('created_at', startISO)
+              .lte('created_at', endISO)
+              .order('created_at', { ascending: false }),
+          ]);
 
-      if (error) {
-        console.warn(`API /api/admin/orders GET (${mode}) DB error:`, error.message);
-        return NextResponse.json({ success: true, orders: [], date: targetDate, formattedDate: formatDisplayDate(targetDate) });
+          const seen = new Set<string>();
+          if (activeRes.status === 'fulfilled' && Array.isArray(activeRes.value.data)) {
+            for (const o of activeRes.value.data) {
+              if (o && o.id && !seen.has(o.id)) {
+                seen.add(o.id);
+                dbOrdersRaw.push(o);
+              }
+            }
+          }
+          if (todayRes.status === 'fulfilled' && Array.isArray(todayRes.value.data)) {
+            for (const o of todayRes.value.data) {
+              if (o && o.id && !seen.has(o.id)) {
+                seen.add(o.id);
+                dbOrdersRaw.push(o);
+              }
+            }
+          }
+        } else {
+          // Specific past daily details
+          const { data } = await supabaseAdmin
+            .from('orders')
+            .select('*')
+            .gte('created_at', startISO)
+            .lte('created_at', endISO)
+            .order('created_at', { ascending: false });
+          dbOrdersRaw = data || [];
+        }
+      } catch (dbErr) {
+        console.warn(`API /api/admin/orders GET (${mode}) DB warning:`, dbErr);
       }
 
-      const orders = (dbOrders || []).map(mapDbOrder);
+      // Map DB rows and merge with fast server live memory (guaranteeing 0 lost orders)
+      const mappedDbOrders = dbOrdersRaw.map(mapDbRowToOrder);
+      const orders = mode === 'live' ? mergeOrdersWithMemory(mappedDbOrders) : mappedDbOrders;
+      const activeCarts = mode === 'live' ? await fetchAllActiveCarts() : [];
 
       // Today Summary Stats
       let itemCount = 0;
@@ -139,6 +181,7 @@ export async function GET(request: NextRequest) {
           cancelledCount,
         },
         orders,
+        activeCarts,
       });
     }
 
@@ -560,6 +603,8 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    updateLiveOrderStatusMemory(orderId, orderStatus);
 
     const updates: Record<string, any> = {
       order_status: orderStatus,

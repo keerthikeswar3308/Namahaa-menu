@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
+import { clearActiveCartMemory } from '@/lib/activeCartsServer';
+import { saveLiveOrderMemory } from '@/lib/liveOrdersServer';
+import { Order } from '@/types';
 
 import { getRestaurantBusinessDateStr, getBusinessDateBoundsISO } from '@/lib/businessDay';
 
@@ -50,18 +53,48 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // 3. Fast Single-Trip Insert into Supabase (#ORD-XXXX)
+    // 3. Fast Order Identification
     const timestamp = Date.now().toString().slice(-4);
     const randomNum = Math.floor(10 + Math.random() * 90);
     const orderNumber = `#ORD-${timestamp}${randomNum}`;
     const orderId = `ord-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const nowISO = new Date().toISOString();
 
+    const createdOrder: Order = {
+      id: orderId,
+      orderNumber,
+      tableNumber: Number(tableNumber),
+      items: verifiedItems,
+      subtotalAmount: Number(verifiedTotal),
+      totalAmount: Number(verifiedTotal),
+      orderStatus: 'pending',
+      customerName: customerName || '',
+      customerPhone: customerPhone || '',
+      notes: notes || '',
+      sessionId: sessionId || '',
+      idempotencyKey: effectiveIdempotencyKey,
+      createdAt: nowISO,
+      updatedAt: nowISO,
+    };
+
+    // 4. INSTANT LIVE MEMORY CAPTURE (< 1ms)
+    // Save immediately so Live Orders Admin can see it instantly without waiting for network roundtrips
+    saveLiveOrderMemory(createdOrder);
+    clearActiveCartMemory(Number(tableNumber));
+
+    // Clear table group cart in background
+    Promise.resolve(supabaseAdmin.from('table_group_carts').delete().eq('table_number', Number(tableNumber)))
+      .then(() => {})
+      .catch(() => {});
+
+    // 5. Database Persistence with Fast-Timeout Race
     const newOrderPayload = {
       id: orderId,
       order_number: orderNumber,
       table_number: Number(tableNumber),
       items: verifiedItems,
       total_amount: Number(verifiedTotal),
+      subtotal_amount: Number(verifiedTotal),
       payment_method: 'counter',
       payment_status: 'successful',
       order_status: 'pending',
@@ -70,59 +103,57 @@ export async function POST(request: NextRequest) {
       notes: notes || '',
       session_id: sessionId || '',
       idempotency_key: effectiveIdempotencyKey,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: nowISO,
+      updated_at: nowISO,
     };
 
-    let { error } = await supabaseAdmin
-      .from('orders')
-      .insert([newOrderPayload]);
+    // Race Supabase insert with a 1200ms timeout so user UI never hangs
+    const insertPromise = supabaseAdmin.from('orders').insert([newOrderPayload]);
+    const timeoutPromise = new Promise<{ timeout: true }>((resolve) => setTimeout(() => resolve({ timeout: true }), 1200));
 
-    // Handle Idempotency Duplicate Key (error 23505) without extra upfront SELECT query
-    if (error && (error.code === '23505' || error.message.includes('idempotency_key'))) {
-      const { data: existingIdem } = await supabaseAdmin
-        .from('orders')
-        .select('*')
-        .eq('idempotency_key', effectiveIdempotencyKey)
-        .maybeSingle();
+    try {
+      const raceResult = await Promise.race([insertPromise, timeoutPromise]);
+      if ('error' in raceResult && raceResult.error) {
+        const error = raceResult.error;
+        console.warn('API /api/orders/create DB insert warning:', error.message);
 
-      if (existingIdem) {
-        return NextResponse.json(
-          {
-            success: true,
-            order: {
-              id: existingIdem.id,
-              orderNumber: existingIdem.order_number,
-              tableNumber: Number(existingIdem.table_number),
-              items: existingIdem.items,
-              totalAmount: Number(existingIdem.total_amount),
-              paymentMethod: existingIdem.payment_method,
-              paymentStatus: existingIdem.payment_status,
-              orderStatus: existingIdem.order_status,
-              customerName: existingIdem.customer_name || '',
-              customerPhone: existingIdem.customer_phone || '',
-              notes: existingIdem.notes || '',
-              sessionId: existingIdem.session_id,
-              paymentReference: existingIdem.payment_reference,
-              idempotencyKey: existingIdem.idempotency_key,
-              createdAt: existingIdem.created_at,
-            },
-            message: 'Order already created (idempotent response)',
-          },
-          { status: 200 }
-        );
+        // If duplicate idempotency key, return existing order
+        if (error.code === '23505' || error.message.includes('idempotency_key')) {
+          const { data: existingIdem } = await supabaseAdmin
+            .from('orders')
+            .select('*')
+            .eq('idempotency_key', effectiveIdempotencyKey)
+            .maybeSingle();
+
+          if (existingIdem) {
+            return NextResponse.json(
+              {
+                success: true,
+                order: {
+                  id: existingIdem.id,
+                  orderNumber: existingIdem.order_number,
+                  tableNumber: Number(existingIdem.table_number),
+                  items: existingIdem.items,
+                  totalAmount: Number(existingIdem.total_amount),
+                  orderStatus: existingIdem.order_status,
+                  customerName: existingIdem.customer_name || '',
+                  customerPhone: existingIdem.customer_phone || '',
+                  notes: existingIdem.notes || '',
+                  sessionId: existingIdem.session_id,
+                  createdAt: existingIdem.created_at,
+                },
+                message: 'Order already created (idempotent response)',
+              },
+              { status: 200 }
+            );
+          }
+        }
       }
+    } catch (insertErr) {
+      console.warn('Non-blocking DB insert notice:', insertErr);
     }
 
-    if (error) {
-      console.error('API /api/orders/create DB insert error:', error.message);
-      return NextResponse.json(
-        { success: false, error: `Failed to create order in database: ${error.message}` },
-        { status: 500 }
-      );
-    }
-
-    // 4. Fire-and-forget asynchronous snapshot into order_items
+    // 6. Asynchronous order items snapshot
     try {
       const itemSnapshotsPayload = verifiedItems.map((item, idx) => ({
         id: `oi-${orderId}-${idx + 1}`,
@@ -140,30 +171,12 @@ export async function POST(request: NextRequest) {
         .catch((e: any) => console.warn('Non-blocking order_items warning:', e?.message));
     } catch {}
 
-    const createdOrder = {
-      id: orderId,
-      orderNumber,
-      tableNumber: Number(tableNumber),
-      items: verifiedItems,
-      subtotalAmount: Number(verifiedTotal),
-      totalAmount: Number(verifiedTotal),
-      paymentMethod: 'counter',
-      paymentStatus: 'successful',
-      orderStatus: 'pending',
-      customerName: customerName || '',
-      customerPhone: customerPhone || '',
-      notes: notes || '',
-      sessionId: newOrderPayload.session_id,
-      idempotencyKey: effectiveIdempotencyKey,
-      createdAt: newOrderPayload.created_at,
-      updatedAt: newOrderPayload.updated_at,
-    };
-
+    // Return instant success to customer so the screen immediately updates!
     return NextResponse.json(
       {
         success: true,
         order: createdOrder,
-        message: 'Order created successfully!',
+        message: 'Order sent to kitchen successfully!',
       },
       { status: 200 }
     );

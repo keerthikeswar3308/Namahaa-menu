@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
 import { getRestaurantBusinessDateStr, getBusinessDateBoundsISO } from '@/lib/businessDay';
+import {
+  syncActiveCartServer,
+  clearActiveCartMemory,
+  getActiveCartsMemory,
+} from '@/lib/activeCartsServer';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -66,19 +71,24 @@ export async function GET(request: NextRequest) {
 
     // Fetch shared group cart items for this table if any
     let groupCart: any[] = [];
-    try {
-      const { data: cartData } = await supabaseAdmin
-        .from('table_group_carts')
-        .select('*')
-        .eq('table_number', tableNumber)
-        .gte('updated_at', startISO)
-        .maybeSingle();
+    const memoryCart = getActiveCartsMemory().find((c) => c.tableNumber === tableNumber);
+    if (memoryCart && memoryCart.items && memoryCart.items.length > 0) {
+      groupCart = memoryCart.items;
+    } else {
+      try {
+        const { data: cartData } = await supabaseAdmin
+          .from('table_group_carts')
+          .select('*')
+          .eq('table_number', tableNumber)
+          .gte('updated_at', startISO)
+          .maybeSingle();
 
-      if (cartData && cartData.items) {
-        groupCart = cartData.items;
+        if (cartData && cartData.items) {
+          groupCart = cartData.items;
+        }
+      } catch (err) {
+        // Table group carts table may not exist yet or fallback
       }
-    } catch (err) {
-      // Table group carts table may not exist yet or fallback
     }
 
     const isTableOccupied = hasActiveOrders || groupCart.length > 0;
@@ -117,7 +127,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { tableNumber, items, sessionId } = body;
+    const { tableNumber, items, sessionId, customerName } = body;
 
     const num = Number(tableNumber);
     if (isNaN(num) || num < 1 || num > 12) {
@@ -127,28 +137,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currentBusinessDate = getRestaurantBusinessDateStr();
-    const { startISO } = getBusinessDateBoundsISO(currentBusinessDate);
-
-    // Try storing/upserting shared table cart in Supabase
-    try {
-      await supabaseAdmin.from('table_group_carts').upsert(
-        {
-          table_number: num,
-          items: items || [],
-          updated_at: new Date().toISOString(),
-          last_session_id: sessionId || '',
-        },
-        { onConflict: 'table_number' }
-      );
-    } catch (err) {
-      console.warn('Upsert table_group_carts notice:', err);
-    }
+    const cart = await syncActiveCartServer(num, items || [], sessionId, customerName);
 
     return NextResponse.json({
       success: true,
       tableNumber: num,
-      itemsCount: (items || []).length,
+      itemsCount: cart ? cart.itemCount : 0,
+      totalAmount: cart ? cart.totalAmount : 0,
+      activeCart: cart,
     });
   } catch (err: any) {
     console.error('API /api/table/session POST error:', err);
@@ -161,7 +157,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * DELETE /api/table/session?tableNumber=X
- * Clears table group session when order is completed by Admin
+ * Clears table group session when order is completed or cart is cleared
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -170,6 +166,7 @@ export async function DELETE(request: NextRequest) {
     const num = Number(tableParam);
 
     if (num && num >= 1 && num <= 12) {
+      clearActiveCartMemory(num);
       try {
         await supabaseAdmin
           .from('table_group_carts')

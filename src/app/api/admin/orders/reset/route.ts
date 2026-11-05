@@ -70,6 +70,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 3. Delete active draft table carts
+    try {
+      await supabaseAdmin.from('table_group_carts').delete().neq('table_number', 0);
+    } catch {}
+
     return NextResponse.json({
       success: true,
       message: 'Database reset successfully! All customer and admin order records have been cleared.',

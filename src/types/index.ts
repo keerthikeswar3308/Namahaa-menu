@@ -95,6 +95,16 @@ export interface Order {
   updatedAt?: string;
 }
 
+export interface ActiveTableCart {
+  tableNumber: number;
+  items: OrderItem[];
+  itemCount: number;
+  totalAmount: number;
+  sessionId?: string;
+  customerName?: string;
+  updatedAt: string;
+}
+
 
 export interface DailyOrderSummary {
   date: string; // YYYY-MM-DD

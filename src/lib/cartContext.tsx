@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { MenuItem } from '@/types';
+import { NamahaStore } from './store';
 
 export interface CartItem {
   item: MenuItem;
@@ -117,7 +118,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
     }
   }, [allMenuItems]);
 
-  // Persist lightweight IDs and quantities only
+  // Persist lightweight IDs and quantities only & Debounce sync to Server
   useEffect(() => {
     if (!mounted) return;
     try {
@@ -128,6 +129,39 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
     } catch (err) {
       console.warn('Error saving cart:', err);
     }
+
+    // Debounced live cart sync for Table so Admin sees items in real time
+    const syncTimeout = setTimeout(() => {
+      try {
+        const tableNumber = NamahaStore.getSelectedTable() || 1;
+        const sessionId = NamahaStore.getDeviceSessionId();
+
+        const formattedItems = (cart || [])
+          .filter((c) => c && c.item && c.item.id)
+          .map((c) => ({
+            id: c.item.id,
+            name: c.item.name,
+            price: Number(c.item.price || 0),
+            quantity: c.quantity || 1,
+            image: c.item.image || '',
+            isVeg: c.item.isVeg !== false,
+          }));
+
+        fetch('/api/table/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableNumber,
+            items: formattedItems,
+            sessionId,
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.warn('Error syncing active table cart:', err);
+      }
+    }, 350);
+
+    return () => clearTimeout(syncTimeout);
   }, [cart, mounted]);
 
   useEffect(() => {
@@ -189,6 +223,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode; allMenuItems: M
 
   const clearCart = () => {
     setCart([]);
+    try {
+      const tableNumber = NamahaStore.getSelectedTable() || 1;
+      fetch(`/api/table/session?tableNumber=${tableNumber}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
   };
 
   const getItemQuantity = (itemId: string): number => {

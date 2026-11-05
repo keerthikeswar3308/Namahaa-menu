@@ -173,6 +173,18 @@ CREATE TABLE IF NOT EXISTS public.cart_items (
 );
 ALTER TABLE public.cart_items ENABLE ROW LEVEL SECURITY;
 
+-- 8b. Create Shared Table Active Carts Table & Enable RLS
+CREATE TABLE IF NOT EXISTS public.table_group_carts (
+    table_number INT PRIMARY KEY,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    total_amount NUMERIC(10, 2) DEFAULT 0,
+    item_count INT DEFAULT 0,
+    last_session_id TEXT,
+    customer_name TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.table_group_carts ENABLE ROW LEVEL SECURITY;
+
 -- 9. Create Live Orders Table & Enable RLS
 CREATE TABLE IF NOT EXISTS public.orders (
     id TEXT PRIMARY KEY,
@@ -310,6 +322,9 @@ BEGIN
     DROP POLICY IF EXISTS "Allow all on cart_items" ON public.cart_items;
     CREATE POLICY "Allow all on cart_items" ON public.cart_items FOR ALL USING (true) WITH CHECK (true);
 
+    DROP POLICY IF EXISTS "Allow all on table_group_carts" ON public.table_group_carts;
+    CREATE POLICY "Allow all on table_group_carts" ON public.table_group_carts FOR ALL USING (true) WITH CHECK (true);
+
     -- Orders
     DROP POLICY IF EXISTS "Allow public insert orders" ON public.orders;
     CREATE POLICY "Allow public insert orders" ON public.orders FOR INSERT WITH CHECK (true);
@@ -333,6 +348,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
         ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.table_group_carts;
     END IF;
 EXCEPTION
     WHEN duplicate_object THEN NULL;

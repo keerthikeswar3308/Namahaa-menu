@@ -2,6 +2,7 @@ import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
 import { initialCategories, initialMenuItems } from '@/data/initialMenuData';
 import { defaultGalleryImages, defaultRestaurantInfo } from '@/data/restaurantInfo';
 import { supabase, isSupabaseConfigured, ensureCloudUrl, deleteImageViaAdminApi } from './supabase';
+import { getRestaurantBusinessDateStr } from './businessDay';
 
 const STORAGE_KEYS = {
   MENU_ITEMS: 'namahaa_menu_items_v1',
@@ -761,15 +762,7 @@ export class NamahaStore {
   static getSelectedTable(serverBusinessDate?: string): number | null {
     if (typeof window === 'undefined') return null;
     
-    // Calculate current IST business date string (04:00 AM late night cutoff)
-    const d = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const ist = new Date(d.getTime() + istOffset + (d.getTimezoneOffset() * 60 * 1000));
-    if (ist.getHours() < 4) {
-      ist.setDate(ist.getDate() - 1);
-    }
-    const currentBusinessDate = serverBusinessDate || `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}-${String(ist.getDate()).padStart(2, '0')}`;
-
+    const currentBusinessDate = serverBusinessDate || getRestaurantBusinessDateStr();
     const storedDate = localStorage.getItem('namahaa_table_session_date') || sessionStorage.getItem('namahaa_table_session_date');
     const val = sessionStorage.getItem(STORAGE_KEYS.TABLE_NUMBER) || localStorage.getItem(STORAGE_KEYS.TABLE_NUMBER);
 
@@ -787,13 +780,7 @@ export class NamahaStore {
 
   static setSelectedTable(tableNum: number, businessDate?: string): void {
     if (typeof window === 'undefined') return;
-    const d = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const ist = new Date(d.getTime() + istOffset + (d.getTimezoneOffset() * 60 * 1000));
-    if (ist.getHours() < 4) {
-      ist.setDate(ist.getDate() - 1);
-    }
-    const currentDate = businessDate || `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}-${String(ist.getDate()).padStart(2, '0')}`;
+    const currentDate = businessDate || getRestaurantBusinessDateStr();
 
     sessionStorage.setItem(STORAGE_KEYS.TABLE_NUMBER, tableNum.toString());
     localStorage.setItem(STORAGE_KEYS.TABLE_NUMBER, tableNum.toString());

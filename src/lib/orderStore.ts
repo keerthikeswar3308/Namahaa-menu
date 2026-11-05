@@ -1,4 +1,4 @@
-import { Order, OrderItem, OrderStatus, DailyOrderSummary, SalesAnalytics } from '@/types';
+import { Order, OrderItem, OrderStatus, DailyOrderSummary, SalesAnalytics, ActiveTableCart } from '@/types';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 const ORDERS_STORAGE_KEY = 'namahaa_orders_v1';
@@ -64,6 +64,7 @@ export class OrderStore {
   // Fetch Live Orders for a target date (defaults to Today IST)
   static async fetchLiveOrders(targetDate?: string): Promise<{
     orders: Order[];
+    activeCarts: ActiveTableCart[];
     date: string;
     formattedDate: string;
     summary: DailyOrderSummary;
@@ -82,6 +83,7 @@ export class OrderStore {
         if (json.success) {
           return {
             orders: json.orders || [],
+            activeCarts: json.activeCarts || [],
             date: json.date || '',
             formattedDate: json.formattedDate || '',
             summary: json.summary || {
@@ -104,6 +106,7 @@ export class OrderStore {
 
     return {
       orders: [],
+      activeCarts: [],
       date: targetDate || '',
       formattedDate: targetDate || '',
       summary: {
@@ -118,6 +121,20 @@ export class OrderStore {
         cancelledCount: 0,
       },
     };
+  }
+
+  // Clear an abandoned table cart from Admin
+  static async clearActiveTableCart(tableNumber: number): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/table/session?tableNumber=${tableNumber}`, {
+        method: 'DELETE',
+        headers: getAdminAuthHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('clearActiveTableCart error:', err);
+      return false;
+    }
   }
 
   // Fetch Compact Previous Days Summary List

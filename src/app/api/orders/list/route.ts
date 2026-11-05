@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
+import { getRestaurantBusinessDateStr, getBusinessDateBoundsISO } from '@/lib/businessDay';
+import { getLiveOrdersMemory } from '@/lib/liveOrdersServer';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -17,10 +19,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const currentBusinessDate = getRestaurantBusinessDateStr();
+    const { startISO, endISO } = getBusinessDateBoundsISO(currentBusinessDate);
+
     let query = supabaseAdmin
       .from('orders')
       .select('*')
-      .eq('session_id', sessionId);
+      .eq('session_id', sessionId)
+      .gte('created_at', startISO)
+      .lte('created_at', endISO);
 
     if (tableNumber) {
       query = query.eq('table_number', Number(tableNumber));
@@ -59,10 +66,26 @@ export async function GET(request: NextRequest) {
       updatedAt: o.updated_at || new Date().toISOString(),
     }));
 
+    // Merge recent orders from server memory for this session
+    const memoryOrders = getLiveOrdersMemory().filter((o) => o.sessionId === sessionId);
+    const orderMap = new Map<string, any>();
+    for (const ord of mapped) {
+      orderMap.set(ord.id, ord);
+    }
+    for (const mem of memoryOrders) {
+      if (!orderMap.has(mem.id)) {
+        orderMap.set(mem.id, mem);
+      }
+    }
+
+    const mergedList = Array.from(orderMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
     return NextResponse.json(
       {
         success: true,
-        orders: mapped,
+        orders: mergedList,
       },
       {
         status: 200,

@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Order, OrderStatus, DailyOrderSummary, MenuItem } from '@/types';
+import { Order, OrderStatus, DailyOrderSummary, MenuItem, ActiveTableCart } from '@/types';
 import { OrderStore } from '@/lib/orderStore';
+import { getRestaurantBusinessDateStr } from '@/lib/businessDay';
 import {
   Bell,
   Clock,
@@ -36,24 +37,16 @@ import {
   X,
   Minus,
   Plus,
+  ShoppingBag,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 
 import { ThermalPrinterModal } from './ThermalPrinterModal';
 
 export const OrdersManagement: React.FC = () => {
   const [printModalState, setPrintModalState] = useState<{ order: Order; type: 'kot' | 'bill' } | null>(null);
-  // IST Date Helper
-  const getTodayISTString = () => {
-    const d = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istDate = new Date(d.getTime() + istOffset + (d.getTimezoneOffset() * 60 * 1000));
-    const year = istDate.getFullYear();
-    const month = String(istDate.getMonth() + 1).padStart(2, '0');
-    const day = String(istDate.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const todayIST = getTodayISTString();
+  const todayIST = getRestaurantBusinessDateStr();
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayIST);
   const [formattedDate, setFormattedDate] = useState<string>('');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -77,6 +70,8 @@ export const OrdersManagement: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [processingOrderIds, setProcessingOrderIds] = useState<Set<string>>(new Set());
   const [printedCounts, setPrintedCounts] = useState<Record<string, number>>({});
+  const [activeCarts, setActiveCarts] = useState<ActiveTableCart[]>([]);
+  const [convertingCartTables, setConvertingCartTables] = useState<Set<number>>(new Set());
 
   // Three-Dot Menu & Modal States
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
@@ -185,6 +180,7 @@ export const OrdersManagement: React.FC = () => {
     try {
       const data = await OrderStore.fetchLiveOrders(dateStr);
       setOrders(data.orders);
+      setActiveCarts(data.activeCarts || []);
       setFormattedDate(data.formattedDate);
       if (data.summary) {
         setSummary(data.summary);
@@ -216,15 +212,60 @@ export const OrdersManagement: React.FC = () => {
       loadDateOrders(todayIST);
     });
 
+    // Fast 3.5-second polling for live kitchen orders & active customer carts
     const interval = setInterval(() => {
       loadDateOrders(todayIST);
-    }, 15000);
+    }, 3500);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
   }, [selectedDateStr, todayIST, isTodaySelected]);
+
+  const handleConvertCartToOrder = async (cart: ActiveTableCart) => {
+    if (convertingCartTables.has(cart.tableNumber)) return;
+    const confirmConvert = window.confirm(
+      `Convert Table #${cart.tableNumber}'s cart (${cart.itemCount} items • ₹${cart.totalAmount.toFixed(2)}) into an active kitchen order?`
+    );
+    if (!confirmConvert) return;
+
+    setConvertingCartTables((prev) => new Set(prev).add(cart.tableNumber));
+    try {
+      const res = await OrderStore.createOrder({
+        tableNumber: cart.tableNumber,
+        items: cart.items,
+        totalAmount: cart.totalAmount,
+        customerName: cart.customerName || `Table ${cart.tableNumber} Guest`,
+        notes: 'Placed by Staff from Active Table Cart',
+        sessionId: cart.sessionId,
+      });
+
+      if (res.success) {
+        await OrderStore.clearActiveTableCart(cart.tableNumber);
+        await loadDateOrders(selectedDateStr);
+      } else {
+        alert(res.error || 'Failed to convert cart to order');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error converting cart to order');
+    } finally {
+      setConvertingCartTables((prev) => {
+        const next = new Set(prev);
+        next.delete(cart.tableNumber);
+        return next;
+      });
+    }
+  };
+
+  const handleClearTableCart = async (tableNumber: number) => {
+    const confirmClear = window.confirm(
+      `Are you sure you want to clear the active cart for Table #${tableNumber}?`
+    );
+    if (!confirmClear) return;
+    await OrderStore.clearActiveTableCart(tableNumber);
+    await loadDateOrders(selectedDateStr);
+  };
 
   const handleDateChange = (daysDelta: number) => {
     const current = new Date(`${selectedDateStr}T00:00:00+05:30`);
@@ -461,8 +502,21 @@ export const OrdersManagement: React.FC = () => {
     printWindow.document.close();
   };
 
+  // Filtered Active Carts
+  const filteredActiveCarts = useMemo(() => {
+    if (!searchQuery.trim()) return activeCarts;
+    const q = searchQuery.toLowerCase();
+    return activeCarts.filter((c) => {
+      const matchesTable = `table ${c.tableNumber}`.includes(q) || `${c.tableNumber}` === q;
+      const matchesCustomer = (c.customerName || '').toLowerCase().includes(q);
+      const matchesItems = c.items.some((i) => i.name.toLowerCase().includes(q));
+      return matchesTable || matchesCustomer || matchesItems;
+    });
+  }, [activeCarts, searchQuery]);
+
   // Filtered Orders
   const filteredOrders = useMemo(() => {
+    if (activeStatusFilter === 'carts') return [];
     return orders.filter((o) => {
       // Exclude secondary merged orders from active list
       if (o.orderStatus === 'merged') return false;
@@ -837,19 +891,29 @@ export const OrdersManagement: React.FC = () => {
           {[
             { id: 'all', label: `ALL (${orders.filter((o) => o.orderStatus !== 'merged').length})` },
             { id: 'active', label: `ACTIVE ORDERS (${summary.activeCount})` },
+            {
+              id: 'carts',
+              label: `🛒 LIVE CARTS (${activeCarts.length})`,
+              isCart: true,
+            },
             { id: 'completed', label: `COMPLETED (${summary.completedCount})` },
             { id: 'cancelled', label: `CANCELLED (${summary.cancelledCount})` },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveStatusFilter(tab.id)}
-              className={`px-3.5 py-1.5 rounded-full font-extrabold text-xs whitespace-nowrap transition ${
+              className={`px-3.5 py-1.5 rounded-full font-extrabold text-xs whitespace-nowrap transition flex items-center gap-1.5 ${
                 activeStatusFilter === tab.id
-                  ? 'bg-amber-500 text-white shadow-md'
+                  ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-400/50'
+                  : tab.isCart && activeCarts.length > 0
+                  ? 'bg-amber-500/20 text-amber-500 dark:text-namaha-gold border border-amber-500/40 hover:bg-amber-500/30'
                   : 'bg-white dark:bg-namaha-green-deep border border-emerald-950/10 dark:border-namaha-gold/20 text-slate-700 dark:text-gray-300 hover:bg-amber-500/10'
               }`}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              {tab.isCart && activeCarts.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+              )}
             </button>
           ))}
         </div>
@@ -879,6 +943,156 @@ export const OrdersManagement: React.FC = () => {
           >
             RETRY
           </button>
+        </div>
+      )}
+
+      {/* Banner if on Carts tab and new kitchen orders exist */}
+      {activeStatusFilter === 'carts' && summary.activeCount > 0 && (
+        <div
+          onClick={() => setActiveStatusFilter('active')}
+          className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/20 via-amber-500/15 to-transparent border border-emerald-500/40 flex items-center justify-between cursor-pointer hover:bg-emerald-500/25 transition animate-fade-in shadow-md mb-4"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-bold text-emerald-400">
+              ⚡ Notice: {summary.activeCount} kitchen order(s) placed and waiting in Live Orders!
+            </span>
+          </div>
+          <button
+            type="button"
+            className="text-xs font-extrabold text-amber-400 hover:text-white px-3 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-1"
+          >
+            Switch to Active Orders &rarr;
+          </button>
+        </div>
+      )}
+
+      {/* 🛒 ACTIVE TABLE CARTS IN PROGRESS */}
+      {(activeStatusFilter === 'all' || activeStatusFilter === 'carts' || activeStatusFilter === 'active') && filteredActiveCarts.length > 0 && (
+        <div className="mb-8 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-500 dark:text-namaha-gold flex items-center justify-center font-bold">
+                <ShoppingBag className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-serif font-extrabold text-amber-600 dark:text-namaha-gold uppercase tracking-wider flex items-center gap-2">
+                  <span>Live Table Carts in Progress ({filteredActiveCarts.length})</span>
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+                </h4>
+                <p className="text-[11px] text-slate-600 dark:text-gray-300">
+                  Customers are currently selecting dishes at these tables before sending to the kitchen.
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 self-start sm:self-center px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
+              ⚡ LIVE REAL-TIME
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredActiveCarts.map((cart) => (
+              <div
+                key={`cart-${cart.tableNumber}`}
+                className="p-6 rounded-3xl bg-amber-50/50 dark:bg-[#062c28] border-2 border-dashed border-amber-500/60 dark:border-namaha-gold/60 shadow-lg flex flex-col justify-between relative overflow-hidden transition hover:shadow-2xl hover:border-amber-500"
+              >
+                {/* Draft Badge Top Right */}
+                <div className="absolute top-0 right-0 bg-gradient-to-r from-amber-500 to-amber-600 text-namaha-green-deep text-[10px] font-black uppercase tracking-wider px-3.5 py-1 rounded-bl-2xl shadow-sm flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-namaha-green-deep animate-ping" />
+                  ADDING ITEMS
+                </div>
+
+                <div>
+                  <div className="pb-3 border-b border-amber-500/20 dark:border-white/10 mb-3">
+                    <span className="text-[11px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-namaha-gold block">
+                      DINING TABLE #{cart.tableNumber}
+                    </span>
+                    <h3 className="text-lg font-serif font-bold text-namaha-green-deep dark:text-white flex items-center gap-2 mt-0.5">
+                      <span>Draft Table Cart</span>
+                      {cart.customerName && (
+                        <span className="text-xs font-sans text-gray-500 dark:text-gray-400 font-normal">
+                          ({cart.customerName})
+                        </span>
+                      )}
+                    </h3>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">
+                      Updated {new Date(cart.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  {/* Items in Cart */}
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {cart.items.map((item, idx) => (
+                      <div
+                        key={`${item.id}-${idx}`}
+                        className="flex items-center justify-between py-1.5 px-3 rounded-xl bg-white dark:bg-black/40 text-xs border border-amber-500/20 dark:border-white/5 shadow-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-700 dark:text-namaha-gold font-extrabold flex items-center justify-center text-[11px]">
+                            {item.quantity}×
+                          </span>
+                          <span className="font-semibold text-slate-800 dark:text-gray-200">
+                            {item.name}
+                          </span>
+                        </div>
+                        <span className="font-bold text-namaha-green-deep dark:text-white">
+                          ₹{(item.price * item.quantity).toFixed(0)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bottom Value & Staff Actions */}
+                <div className="pt-4 mt-3 border-t border-amber-500/20 dark:border-white/10 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-600 dark:text-gray-400 font-bold">
+                      Cart Total ({cart.itemCount} items):
+                    </span>
+                    <span className="text-xl font-serif font-extrabold text-amber-600 dark:text-namaha-gold">
+                      ₹{cart.totalAmount.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConvertCartToOrder(cart)}
+                      disabled={convertingCartTables.has(cart.tableNumber)}
+                      className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-namaha-gold hover:from-amber-400 hover:to-amber-500 text-namaha-green-deep font-extrabold text-xs shadow-md transition flex items-center justify-center gap-1 active:scale-95 disabled:opacity-50"
+                      title="Place official kitchen order for this table"
+                    >
+                      <ChefHat className="w-3.5 h-3.5" />
+                      <span>{convertingCartTables.has(cart.tableNumber) ? 'Sending...' : 'Send to Kitchen'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleClearTableCart(cart.tableNumber)}
+                      className="py-2.5 px-2 rounded-xl bg-red-950/20 hover:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95"
+                      title="Clear active cart for this table"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear Cart</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State when "LIVE CARTS" filter selected and none active */}
+      {activeStatusFilter === 'carts' && filteredActiveCarts.length === 0 && (
+        <div className="p-12 text-center bg-white dark:bg-namaha-green-deep rounded-3xl border border-emerald-950/10 dark:border-namaha-gold/20 shadow-xl my-8">
+          <ShoppingBag className="w-12 h-12 text-amber-500/50 mx-auto mb-4" />
+          <h3 className="text-xl font-serif font-bold text-namaha-green-deep dark:text-white mb-2">
+            NO ACTIVE TABLE CARTS RIGHT NOW
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-gray-400 max-w-md mx-auto font-medium">
+            When customers browse the menu and tap &quot;ADD&quot; to their cart, their draft items and table number will appear here in real time.
+          </p>
         </div>
       )}
 
@@ -1177,7 +1391,7 @@ export const OrdersManagement: React.FC = () => {
             );
           })}
         </div>
-      ) : (
+      ) : activeStatusFilter !== 'carts' ? (
         /* Empty State */
         <div className="p-12 text-center bg-white dark:bg-namaha-green-deep rounded-3xl border border-emerald-950/10 dark:border-namaha-gold/20 shadow-xl my-8">
           <Utensils className="w-12 h-12 text-amber-500 mx-auto mb-4 animate-bounce" />
@@ -1190,7 +1404,7 @@ export const OrdersManagement: React.FC = () => {
               : 'No orders were recorded for the selected calendar date.'}
           </p>
         </div>
-      )}
+      ) : null}
 
       {/* ======================================================== */}
       {/* MODAL 1: VIEW ORDER DETAILS                              */}
