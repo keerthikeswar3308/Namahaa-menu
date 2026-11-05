@@ -270,6 +270,50 @@ export class NamahaStore {
     return newItem;
   }
 
+  static async toggleMenuItemAvailability(id: string, isAvailable: boolean): Promise<boolean> {
+    const items = this.getMenuItems();
+    const index = items.findIndex((i) => i.id === id);
+    if (index !== -1) {
+      items[index] = { ...items[index], isAvailable };
+      this.setMenuItems([...items]);
+      notifyStoreUpdated();
+    }
+
+    const syncRes = await callAdminSyncApi({
+      action: 'toggle_availability',
+      itemId: id,
+      isAvailable,
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to update availability in Supabase`);
+    }
+
+    notifyStoreUpdated();
+    return true;
+  }
+
+  static async bulkToggleMenuItemsAvailability(itemIds: string[], isAvailable: boolean): Promise<boolean> {
+    const items = this.getMenuItems();
+    const idSet = new Set(itemIds);
+    const updated = items.map((i) => (idSet.has(i.id) ? { ...i, isAvailable } : i));
+    this.setMenuItems(updated);
+    notifyStoreUpdated();
+
+    const syncRes = await callAdminSyncApi({
+      action: 'bulk_availability',
+      itemIds,
+      isAvailable,
+    });
+
+    if (!syncRes.success) {
+      throw new Error(syncRes.error || `Failed to update bulk stock in Supabase`);
+    }
+
+    notifyStoreUpdated();
+    return true;
+  }
+
   static async updateMenuItem(id: string, updates: Partial<MenuItem>): Promise<MenuItem | null> {
     const items = this.getMenuItems();
     const index = items.findIndex((i) => i.id === id);

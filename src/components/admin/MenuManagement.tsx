@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Category, GalleryImage, MenuItem } from '@/types';
 import { ItemImagePicker } from './ItemImagePicker';
-import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, CheckCircle, XCircle, Star, Award, Flame, Save, X, AlertCircle, RefreshCw, Check } from 'lucide-react';
 
 interface MenuManagementProps {
   items: MenuItem[];
@@ -13,6 +13,7 @@ interface MenuManagementProps {
   onSaveItem: (item: MenuItem | Omit<MenuItem, 'id'>) => Promise<void> | void;
   onDeleteItem: (id: string) => Promise<void> | void;
   onToggleStatus: (id: string, isAvailable: boolean) => Promise<void> | void;
+  onBulkToggleStatus?: (itemIds: string[], isAvailable: boolean) => Promise<void> | void;
 }
 
 export const MenuManagement: React.FC<MenuManagementProps> = ({
@@ -22,9 +23,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
   onSaveItem,
   onDeleteItem,
   onToggleStatus,
+  onBulkToggleStatus,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
+  const [updatingItemIds, setUpdatingItemIds] = useState<Set<string>>(new Set());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isBulkUpdating, setIsBulkUpdating] = useState<boolean>(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -124,28 +130,78 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
     }
   };
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.categoryName.toLowerCase().includes(search.toLowerCase());
-
-    let matchesCat = selectedCategory === 'all';
-    if (!matchesCat) {
-      const selectedCatObj = categories.find((c) => c.id === selectedCategory);
-      const selectedCatName = selectedCatObj?.name?.trim().toLowerCase();
-
-      const matchesId = item.categoryId === selectedCategory;
-      const matchesName = Boolean(
-        selectedCatName &&
-        item.categoryName &&
-        item.categoryName.trim().toLowerCase() === selectedCatName
-      );
-
-      matchesCat = matchesId || matchesName;
+  const handleToggleStock = async (id: string, nextStatus: boolean, itemName: string) => {
+    setUpdatingItemIds((prev) => new Set(prev).add(id));
+    try {
+      await onToggleStatus(id, nextStatus);
+      setToastMessage(`"${itemName}" is now ${nextStatus ? 'In Stock ✓' : 'Out of Stock ✕'}`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (e: any) {
+      console.error('Toggle stock error:', e);
+    } finally {
+      setUpdatingItemIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
+  };
 
-    return matchesSearch && matchesCat;
-  });
+  const handleBulkSetStock = async (isAvailable: boolean) => {
+    if (!onBulkToggleStatus) return;
+    const targetIds = filteredItems.map((i) => i.id);
+    if (targetIds.length === 0) return;
+
+    const actionLabel = isAvailable ? 'In Stock' : 'Out of Stock';
+    const confirmMsg = `Mark all ${targetIds.length} currently listed item(s) as ${actionLabel}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsBulkUpdating(true);
+    try {
+      await onBulkToggleStatus(targetIds, isAvailable);
+      setToastMessage(`All ${targetIds.length} item(s) marked as ${actionLabel} ✓`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (e: any) {
+      console.error('Bulk update error:', e);
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const inStockCount = useMemo(() => items.filter((i) => i.isAvailable !== false).length, [items]);
+  const outOfStockCount = useMemo(() => items.filter((i) => i.isAvailable === false).length, [items]);
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(search.toLowerCase()) ||
+        item.categoryName.toLowerCase().includes(search.toLowerCase());
+
+      let matchesCat = selectedCategory === 'all';
+      if (!matchesCat) {
+        const selectedCatObj = categories.find((c) => c.id === selectedCategory);
+        const selectedCatName = selectedCatObj?.name?.trim().toLowerCase();
+
+        const matchesId = item.categoryId === selectedCategory;
+        const matchesName = Boolean(
+          selectedCatName &&
+          item.categoryName &&
+          item.categoryName.trim().toLowerCase() === selectedCatName
+        );
+
+        matchesCat = matchesId || matchesName;
+      }
+
+      let matchesStock = true;
+      if (stockFilter === 'in_stock') {
+        matchesStock = item.isAvailable !== false;
+      } else if (stockFilter === 'out_of_stock') {
+        matchesStock = item.isAvailable === false;
+      }
+
+      return matchesSearch && matchesCat && matchesStock;
+    });
+  }, [items, search, selectedCategory, categories, stockFilter]);
 
   return (
     <div className="space-y-6 animate-fade-in text-white">
@@ -177,6 +233,18 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
         </div>
       )}
 
+      {toastMessage && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-namaha-green-deep to-emerald-950 border-2 border-namaha-gold/70 text-white text-sm font-bold flex items-center justify-between gap-3 shadow-2xl animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle className="w-5 h-5 text-namaha-gold shrink-0 animate-pulse" />
+            <span>{toastMessage}</span>
+          </div>
+          <span className="text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-namaha-gold/20 text-namaha-gold border border-namaha-gold/40">
+            Live Website Updated
+          </span>
+        </div>
+      )}
+
       {/* Filter & Search Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
@@ -202,6 +270,85 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Instant Stock Status Filters & Bulk Update Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-namaha-green-dark/80 border border-namaha-gold/30 shadow-md">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-namaha-gold mr-1 flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5 text-namaha-gold" /> Filter By Stock:
+          </span>
+          <button
+            type="button"
+            onClick={() => setStockFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              stockFilter === 'all'
+                ? 'bg-namaha-gold text-namaha-green-deep shadow-md'
+                : 'bg-white/10 hover:bg-white/20 text-gray-300'
+            }`}
+          >
+            <span>All Items</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+              {items.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockFilter('in_stock')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              stockFilter === 'in_stock'
+                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>In Stock</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+              {inStockCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockFilter('out_of_stock')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              stockFilter === 'out_of_stock'
+                ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                : 'bg-rose-950/60 hover:bg-rose-900/60 text-rose-400 border border-rose-500/30'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-400" />
+            <span>Out of Stock</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+              {outOfStockCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Bulk Stock Controls */}
+        {onBulkToggleStatus && filteredItems.length > 0 && (
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleBulkSetStock(true)}
+              disabled={isBulkUpdating}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95"
+              title="Mark all currently listed items as In Stock"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Mark Filtered In Stock ({filteredItems.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBulkSetStock(false)}
+              disabled={isBulkUpdating}
+              className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95"
+              title="Mark all currently listed items as Out of Stock"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Mark Filtered Out of Stock ({filteredItems.length})</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Edit / Add Viewport-Centered Fixed Modal Dialog via React Portal */}
@@ -442,15 +589,48 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
               {/* Status & Actions Bar */}
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
                 <button
-                  onClick={() => onToggleStatus(item.id, !item.isAvailable)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleStock(item.id, !item.isAvailable, item.name);
+                  }}
+                  disabled={updatingItemIds.has(item.id)}
+                  className={`group/toggle relative inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-200 active:scale-95 shadow-md cursor-pointer select-none ${
                     item.isAvailable
-                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-red-950/80 text-red-400 border border-red-500/30'
-                  }`}
+                      ? 'bg-emerald-950 text-emerald-300 border-2 border-emerald-500/70 hover:bg-emerald-900 shadow-emerald-950/60'
+                      : 'bg-rose-950 text-rose-300 border-2 border-rose-500/70 hover:bg-rose-900 shadow-rose-950/60'
+                  } ${updatingItemIds.has(item.id) ? 'opacity-70 cursor-wait' : ''}`}
+                  title={item.isAvailable ? 'Click to mark OUT OF STOCK' : 'Click to mark IN STOCK'}
+                  aria-label={`Toggle stock status for ${item.name}`}
                 >
-                  {item.isAvailable ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                  <span>{item.isAvailable ? 'In Stock' : 'Out of Stock'}</span>
+                  {/* Sliding Knob Track */}
+                  <span
+                    className={`relative inline-block w-8 h-4 rounded-full transition-colors duration-200 ${
+                      item.isAvailable ? 'bg-emerald-500' : 'bg-rose-600'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 inline-block w-3 h-3 rounded-full bg-white shadow-md transition-transform duration-200 ease-out ${
+                        item.isAvailable ? 'translate-x-4.5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </span>
+
+                  <span className="font-extrabold text-[11px] tracking-wide whitespace-nowrap">
+                    {updatingItemIds.has(item.id) ? (
+                      <span className="flex items-center gap-1 text-amber-300">
+                        <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                      </span>
+                    ) : item.isAvailable ? (
+                      <span className="flex items-center gap-1 text-emerald-300">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> In Stock
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-rose-300">
+                        <XCircle className="w-3.5 h-3.5 text-rose-400" /> Out of Stock
+                      </span>
+                    )}
+                  </span>
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -527,15 +707,48 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                   </td>
                   <td className="px-6 py-4">
                     <button
-                      onClick={() => onToggleStatus(item.id, !item.isAvailable)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleStock(item.id, !item.isAvailable, item.name);
+                      }}
+                      disabled={updatingItemIds.has(item.id)}
+                      className={`group/toggle relative inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-200 active:scale-95 shadow-md cursor-pointer select-none ${
                         item.isAvailable
-                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-red-950/80 text-red-400 border border-red-500/30'
-                      }`}
+                          ? 'bg-emerald-950 text-emerald-300 border-2 border-emerald-500/70 hover:bg-emerald-900 shadow-emerald-950/60'
+                          : 'bg-rose-950 text-rose-300 border-2 border-rose-500/70 hover:bg-rose-900 shadow-rose-950/60'
+                      } ${updatingItemIds.has(item.id) ? 'opacity-70 cursor-wait' : ''}`}
+                      title={item.isAvailable ? 'Click to mark OUT OF STOCK' : 'Click to mark IN STOCK'}
+                      aria-label={`Toggle stock status for ${item.name}`}
                     >
-                      {item.isAvailable ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                      <span>{item.isAvailable ? 'In Stock' : 'Out of Stock'}</span>
+                      {/* Sliding Knob Track */}
+                      <span
+                        className={`relative inline-block w-8 h-4 rounded-full transition-colors duration-200 ${
+                          item.isAvailable ? 'bg-emerald-500' : 'bg-rose-600'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 inline-block w-3 h-3 rounded-full bg-white shadow-md transition-transform duration-200 ease-out ${
+                            item.isAvailable ? 'translate-x-4.5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </span>
+
+                      <span className="font-extrabold text-[11px] tracking-wide whitespace-nowrap">
+                        {updatingItemIds.has(item.id) ? (
+                          <span className="flex items-center gap-1 text-amber-300">
+                            <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                          </span>
+                        ) : item.isAvailable ? (
+                          <span className="flex items-center gap-1 text-emerald-300">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> In Stock
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-rose-300">
+                            <XCircle className="w-3.5 h-3.5 text-rose-400" /> Out of Stock
+                          </span>
+                        )}
+                      </span>
                     </button>
                   </td>
                   <td className="px-6 py-4 text-right">

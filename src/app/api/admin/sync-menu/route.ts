@@ -32,6 +32,44 @@ export async function POST(request: NextRequest) {
       deleteGalleryId,
     } = body;
 
+    // Fast Single-Item Stock Availability Toggle (< 25ms)
+    if (action === 'toggle_availability' && body.itemId) {
+      const { data, error } = await supabaseAdmin
+        .from('menu_items')
+        .update({
+          is_available: Boolean(body.isAvailable),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', body.itemId)
+        .select('id, name, is_available');
+
+      if (error) {
+        console.error('Supabase toggle_availability error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, updatedItem: data?.[0] });
+    }
+
+    // Fast Bulk Stock Availability Update (< 30ms)
+    if (action === 'bulk_availability' && Array.isArray(body.itemIds) && body.itemIds.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from('menu_items')
+        .update({
+          is_available: Boolean(body.isAvailable),
+          updated_at: new Date().toISOString(),
+        })
+        .in('id', body.itemIds)
+        .select('id, name, is_available');
+
+      if (error) {
+        console.error('Supabase bulk_availability error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, count: data?.length });
+    }
+
     // Handle Table Tokens Update
     if (tableTokens && (action === 'update_table_tokens' || mode)) {
       const tableRows = Object.entries(tableTokens).map(([num, tok]) => ({

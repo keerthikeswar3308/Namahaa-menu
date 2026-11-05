@@ -115,10 +115,24 @@ export default function AdminPage() {
 
   const handleToggleItemStatus = async (id: string, isAvailable: boolean) => {
     try {
-      await NamahaStore.updateMenuItem(id, { isAvailable });
-      await loadAllData();
+      // 1. Immediate optimistic state update
+      setMenuItems((prev) => prev.map((item) => (item.id === id ? { ...item, isAvailable } : item)));
+      // 2. Direct fast update in Supabase
+      await NamahaStore.toggleMenuItemAvailability(id, isAvailable);
     } catch (err: any) {
-      alert(`Failed to update availability in Supabase: ${err.message}`);
+      alert(`Failed to update stock status in Supabase: ${err.message}`);
+      await loadAllData();
+    }
+  };
+
+  const handleBulkToggleItemStatus = async (itemIds: string[], isAvailable: boolean) => {
+    try {
+      const idSet = new Set(itemIds);
+      setMenuItems((prev) => prev.map((item) => (idSet.has(item.id) ? { ...item, isAvailable } : item)));
+      await NamahaStore.bulkToggleMenuItemsAvailability(itemIds, isAvailable);
+    } catch (err: any) {
+      alert(`Failed to update bulk stock in Supabase: ${err.message}`);
+      await loadAllData();
     }
   };
 
@@ -382,6 +396,7 @@ export default function AdminPage() {
             onSaveItem={handleSaveMenuItem}
             onDeleteItem={handleDeleteMenuItem}
             onToggleStatus={handleToggleItemStatus}
+            onBulkToggleStatus={handleBulkToggleItemStatus}
           />
         )}
 
