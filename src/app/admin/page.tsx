@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Category, GalleryImage, MenuItem, RestaurantInfo } from '@/types';
 import { NamahaStore } from '@/lib/store';
 import { AdminLogin } from '@/components/admin/AdminLogin';
@@ -35,14 +35,21 @@ export default function AdminPage() {
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(NamahaStore.getRestaurantInfo());
   const [galleryImages, setGalleryImages] = useState<GalleryImage[]>([]);
 
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
   useEffect(() => {
     setIsAuthenticated(NamahaStore.isAdminLoggedIn());
     loadAllData();
     initAudioUnlock();
 
-    // Global real-time order arrival sound alert for admin
-    const unsubscribe = OrderStore.subscribeToLiveOrders(() => {
-      playKitchenChime();
+    // Global real-time order arrival sound alert for admin (rings on incoming orders when outside Orders tab)
+    const unsubscribe = OrderStore.subscribeToLiveOrders((payload) => {
+      if (payload?.eventType === 'INSERT' && activeTabRef.current !== 'orders') {
+        playKitchenChime();
+      }
     });
     return () => unsubscribe();
   }, []);
