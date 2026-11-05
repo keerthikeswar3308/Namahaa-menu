@@ -7,6 +7,7 @@ import {
   mergeOrdersWithMemory,
   mapDbRowToOrder,
   updateLiveOrderStatusMemory,
+  getLiveOrdersMemory,
 } from '@/lib/liveOrdersServer';
 
 export const dynamic = 'force-dynamic';
@@ -86,15 +87,17 @@ export async function GET(request: NextRequest) {
     const customEnd = searchParams.get('endDate');
 
     // -------------------------------------------------------------
-    // MODE 1: LIVE ORDERS (Date Specific, Defaults to TODAY IST)
+    // MODE 1: LIVE ORDERS & DAILY DETAILS
     // -------------------------------------------------------------
     if (mode === 'live' || mode === 'daily_details') {
       const { startISO, endISO } = getBusinessDateBoundsISO(targetDate);
+      const isTargetToday = targetDate === getRestaurantBusinessDateStr();
       
       let dbOrdersRaw: any[] = [];
       try {
-        if (mode === 'live') {
-          // For LIVE mode: Fetch ALL active kitchen orders (regardless of time boundary)
+        if (mode === 'live' || isTargetToday) {
+          // For LIVE mode or when opening today's orders in history:
+          // Fetch ALL active kitchen orders (regardless of time boundary)
           // PLUS all orders within today's business date range
           const [activeRes, todayRes] = await Promise.allSettled([
             supabaseAdmin
@@ -143,7 +146,7 @@ export async function GET(request: NextRequest) {
 
       // Map DB rows and merge with fast server live memory (guaranteeing 0 lost orders)
       const mappedDbOrders = dbOrdersRaw.map(mapDbRowToOrder);
-      const orders = mode === 'live' ? mergeOrdersWithMemory(mappedDbOrders) : mappedDbOrders;
+      const orders = (mode === 'live' || isTargetToday) ? mergeOrdersWithMemory(mappedDbOrders) : mappedDbOrders;
       const activeCarts = mode === 'live' ? await fetchAllActiveCarts() : [];
 
       // Today Summary Stats
@@ -193,8 +196,8 @@ export async function GET(request: NextRequest) {
       const endDateStr = getISTDateString();
       const past90Date = new Date();
       past90Date.setDate(past90Date.getDate() - 90);
-      const { startISO } = getISTDateBounds(getISTDateString(past90Date));
-      const { endISO } = getISTDateBounds(endDateStr);
+      const { startISO } = getBusinessDateBoundsISO(getISTDateString(past90Date));
+      const { endISO } = getBusinessDateBoundsISO(endDateStr);
 
       const { data: dbOrders, error } = await supabaseAdmin
         .from('orders')
@@ -206,6 +209,23 @@ export async function GET(request: NextRequest) {
       if (error) {
         console.warn('API /api/admin/orders history_list DB warning:', error.message);
         return NextResponse.json({ success: true, historyList: [] });
+      }
+
+      // Merge fast in-memory orders (for today's session)
+      const memoryOrders = getLiveOrdersMemory();
+      const allHistoryOrders = [...(dbOrders || [])];
+      const seenIds = new Set(allHistoryOrders.map((o) => o.id));
+      for (const memOrder of memoryOrders) {
+        if (!seenIds.has(memOrder.id)) {
+          seenIds.add(memOrder.id);
+          allHistoryOrders.push({
+            id: memOrder.id,
+            total_amount: memOrder.totalAmount,
+            order_status: memOrder.orderStatus,
+            created_at: memOrder.createdAt,
+            items: memOrder.items,
+          });
+        }
       }
 
       // Group by IST Date String
@@ -220,7 +240,7 @@ export async function GET(request: NextRequest) {
         cancelledCount: number;
       }>();
 
-      (dbOrders || []).forEach((row: any) => {
+      allHistoryOrders.forEach((row: any) => {
         const status = row.order_status || 'pending';
         if (status === 'merged') return; // Exclude merged secondary orders from history summaries
 

@@ -55,11 +55,48 @@ export const OrderHistoryManagement: React.FC = () => {
     setIsLoadingDateDetails(true);
     try {
       const data = await OrderStore.fetchDailyDetails(summary.date);
-      setDateOrders(data.orders);
+      setDateOrders(data.orders || []);
+      if (data.summary && data.orders && data.orders.length > 0) {
+        setSelectedDateSummary(data.summary);
+      }
     } catch (err) {
       console.error('handleOpenDate error:', err);
     } finally {
       setIsLoadingDateDetails(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    await loadHistoryList();
+    if (selectedDateSummary) {
+      setIsLoadingDateDetails(true);
+      try {
+        const data = await OrderStore.fetchDailyDetails(selectedDateSummary.date);
+        setDateOrders(data.orders || []);
+        if (data.summary && data.orders && data.orders.length > 0) {
+          setSelectedDateSummary(data.summary);
+        }
+      } catch (err) {
+        console.error('handleRefresh error:', err);
+      } finally {
+        setIsLoadingDateDetails(false);
+      }
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+      case 'served':
+        return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+      case 'cancelled':
+        return 'bg-red-500/20 text-red-400 border border-red-500/30';
+      case 'ready':
+        return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+      case 'preparing':
+        return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+      default:
+        return 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
     }
   };
 
@@ -136,11 +173,11 @@ export const OrderHistoryManagement: React.FC = () => {
           </div>
 
           <button
-            onClick={loadHistoryList}
-            disabled={isLoadingList}
+            onClick={handleRefresh}
+            disabled={isLoadingList || isLoadingDateDetails}
             className="p-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs flex items-center gap-2 shadow-md transition disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoadingList ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoadingList || isLoadingDateDetails ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
@@ -277,27 +314,41 @@ export const OrderHistoryManagement: React.FC = () => {
                   <div
                     key={ord.id}
                     onClick={() => setSelectedOrder(ord)}
-                    className="p-4 flex items-center justify-between hover:bg-amber-500/10 transition cursor-pointer group"
+                    className="p-4 sm:p-5 flex items-center justify-between hover:bg-amber-500/10 transition cursor-pointer group"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-sm text-slate-800 dark:text-white group-hover:text-amber-500">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-white group-hover:text-amber-500 transition-colors">
                           {ord.orderNumber}
                         </span>
-                        <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-[10px] font-bold text-slate-700 dark:text-gray-300">
                           TABLE #{ord.tableNumber}
                         </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${getStatusBadge(ord.orderStatus)}`}>
+                          {ord.orderStatus}
+                        </span>
                       </div>
-                      <span className="text-xs text-gray-400 font-medium">
-                        {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {ord.items.length} items
-                      </span>
+                      
+                      <div className="text-xs text-slate-500 dark:text-gray-400 font-medium">
+                        {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {ord.items.length} {ord.items.length === 1 ? 'item' : 'items'}
+                        {ord.customerName ? ` • Guest: ${ord.customerName}` : ''}
+                      </div>
+
+                      {ord.items && ord.items.length > 0 && (
+                        <div className="text-[11px] text-slate-600 dark:text-gray-300 font-normal line-clamp-1">
+                          {ord.items.map((it) => `${it.quantity}x ${it.name}`).join(', ')}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <span className="font-serif font-extrabold text-base text-namaha-green-deep dark:text-namaha-gold">
-                        ₹{ord.totalAmount.toFixed(0)}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-amber-500" />
+                    <div className="flex items-center gap-4 pl-3">
+                      <div className="text-right">
+                        <span className="font-serif font-extrabold text-base sm:text-lg text-namaha-green-deep dark:text-namaha-gold block">
+                          ₹{ord.totalAmount.toFixed(0)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Tap to view</span>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
                     </div>
                   </div>
                 ))}
