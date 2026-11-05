@@ -339,7 +339,11 @@ export async function GET(request: NextRequest) {
         .gte('created_at', prevStartISO)
         .lte('created_at', prevEndISO);
 
-      const currOrders = (currDbOrders || []).map(mapDbOrder).filter((o) => o.orderStatus !== 'merged');
+      const rawCurrMapped = (currDbOrders || []).map(mapDbOrder);
+      const mergedCurr = mergeOrdersWithMemory(rawCurrMapped);
+      const currOrders = mergedCurr
+        .filter((o) => o.createdAt >= currStartISO && o.createdAt <= currEndISO)
+        .filter((o) => o.orderStatus !== 'merged');
       const prevOrders = (prevDbOrders || []).map(mapDbOrder).filter((o) => o.orderStatus !== 'merged');
 
 

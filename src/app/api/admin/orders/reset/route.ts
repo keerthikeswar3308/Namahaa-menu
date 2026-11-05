@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseServer';
 import { setDynamicAdminCredentials, verifyAdminPasscode, verifyAdminRequest } from '@/lib/authServer';
+import { clearLiveOrdersMemory } from '@/lib/liveOrdersServer';
+import { clearAllActiveCartsMemory } from '@/lib/activeCartsServer';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function POST(request: NextRequest) {
   try {
-    if (!verifyAdminRequest(request)) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized: Admin authentication required.' },
-        { status: 401 }
-      );
-    }
-
-    // Load custom credentials saved in Supabase restaurant_info
+    // 1. Load custom credentials saved in Supabase restaurant_info first
     try {
       const { data: dbInfo } = await supabaseAdmin
         .from('restaurant_info')
@@ -25,28 +20,46 @@ export async function POST(request: NextRequest) {
         setDynamicAdminCredentials(dbInfo.admin_username, dbInfo.admin_passcode);
       }
     } catch (e) {
-      // Fallback
+      // Fallback to default credentials
     }
 
-    const body = await request.json();
-    const { passcode } = body as { passcode?: string };
+    // 2. Parse request body
+    let passcode = '';
+    try {
+      const body = await request.json();
+      if (body && typeof body.passcode === 'string') {
+        passcode = body.passcode.trim();
+      }
+    } catch {}
 
-    if (!passcode || typeof passcode !== 'string' || !passcode.trim()) {
+    // Check header passcode as well if body empty
+    if (!passcode) {
+      passcode = (request.headers.get('x-admin-passcode') || '').trim();
+    }
+
+    // 3. Verify admin authorization: either valid admin session or valid admin passcode
+    const isPasscodeValid = passcode ? verifyAdminPasscode(passcode) : false;
+    const isRequestAuthorized = verifyAdminRequest(request);
+
+    if (!isPasscodeValid && !isRequestAuthorized) {
       return NextResponse.json(
-        { success: false, error: 'Admin password is required to reset database.' },
-        { status: 400 }
+        { success: false, error: 'Unauthorized: Admin authentication required.' },
+        { status: 401 }
       );
     }
 
-    // Verify admin passcode
-    if (!verifyAdminPasscode(passcode.trim())) {
+    if (!isPasscodeValid) {
       return NextResponse.json(
         { success: false, error: 'Incorrect admin password. Database reset denied.' },
         { status: 403 }
       );
     }
 
-    // 1. Delete order_items
+    // 4. Clear in-memory live orders and carts immediately
+    clearLiveOrdersMemory();
+    clearAllActiveCartsMemory();
+
+    // 5. Delete order_items from Supabase
     const { error: itemsErr } = await supabaseAdmin
       .from('order_items')
       .delete()
@@ -56,7 +69,7 @@ export async function POST(request: NextRequest) {
       console.error('Failed to clear order_items:', itemsErr);
     }
 
-    // 2. Delete orders
+    // 6. Delete orders from Supabase
     const { error: ordersErr } = await supabaseAdmin
       .from('orders')
       .delete()
@@ -70,7 +83,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Delete active draft table carts
+    // 7. Delete active draft table carts
     try {
       await supabaseAdmin.from('table_group_carts').delete().neq('table_number', 0);
     } catch {}

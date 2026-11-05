@@ -81,6 +81,13 @@ export function clearActiveCartMemory(tableNumber: number): void {
 }
 
 /**
+ * Clears all active carts from server memory (used on DB reset)
+ */
+export function clearAllActiveCartsMemory(): void {
+  activeCartsMemory.clear();
+}
+
+/**
  * Persists active cart to Supabase table_group_carts (if table exists)
  * and keeps server memory cache synchronized.
  */

@@ -129,3 +129,11 @@ export function mergeOrdersWithMemory(dbOrders: Order[] = []): Order[] {
   );
 }
 
+/**
+ * Clears all orders from server memory (used on DB reset)
+ */
+export function clearLiveOrdersMemory(): void {
+  liveOrdersMemory.clear();
+}
+
+

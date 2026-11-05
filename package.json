@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "opennextjs-cloudflare build",
+    "build": "opennextjs-cloudflare build --dangerouslyUseUnsupportedNextVersion",
     "start": "next start",
     "lint": "next lint",
-    "preview": "opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare deploy",
+    "preview": "opennextjs-cloudflare preview --dangerouslyUseUnsupportedNextVersion",
+    "deploy": "opennextjs-cloudflare deploy --dangerouslyUseUnsupportedNextVersion",
     "reset:admin": "node src/scripts/reset_admin_password.mjs"
   },
   "dependencies": {
