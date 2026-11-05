@@ -498,7 +498,7 @@ const CartBottomSheetInner: React.FC = () => {
                         key={ordId}
                         className="p-5 rounded-3xl bg-black/50 border border-namaha-gold/30 shadow-xl space-y-3.5 text-xs transition hover:border-namaha-gold/60"
                       >
-                        {/* Order Header: Order #, Table No., Time, Payment Status */}
+                        {/* Order Header: Order #, Table No., Time */}
                         <div className="flex items-start justify-between border-b border-white/10 pb-3 gap-2">
                           <div>
                             <h4 className="text-base font-serif font-extrabold text-white tracking-wide">
@@ -508,9 +508,9 @@ const CartBottomSheetInner: React.FC = () => {
                               Table No. {tblNum} • {formatOrderDateTime(order.createdAt)}
                             </p>
                           </div>
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 flex-shrink-0">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>✓ Payment Successful</span>
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-namaha-gold/15 text-namaha-gold border border-namaha-gold/30 flex items-center gap-1 flex-shrink-0">
+                            <Heart className="w-3.5 h-3.5 fill-namaha-gold/30 text-namaha-gold" />
+                            <span>Thank You!</span>
                           </span>
                         </div>
 
@@ -959,14 +959,14 @@ const CartBottomSheetInner: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Payment Status */}
-                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-xs">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Payment Status:</span>
+                {/* Thank You Note (No payment status shown) */}
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-namaha-gold/10 border border-namaha-gold/30 text-xs">
+                  <div className="flex items-center gap-1.5 text-namaha-gold font-semibold">
+                    <Heart className="w-4 h-4 fill-namaha-gold/30 text-namaha-gold" />
+                    <span>Namahaa Tiffin Room</span>
                   </div>
-                  <span className="font-bold text-emerald-300">
-                    ✓ Payment Successful
+                  <span className="font-extrabold text-amber-300">
+                    Thank You!
                   </span>
                 </div>
 
