@@ -163,6 +163,14 @@ export const OrdersManagement: React.FC = () => {
   useEffect(() => {
     initAudioUnlock();
     setAudioActive(isAudioReady());
+
+    const handleUnlocked = () => {
+      setAudioActive(true);
+    };
+    window.addEventListener('namaha_audio_unlocked', handleUnlocked);
+    return () => {
+      window.removeEventListener('namaha_audio_unlocked', handleUnlocked);
+    };
   }, []);
 
   const handleActivateAndTestSound = async () => {
@@ -201,9 +209,26 @@ export const OrdersManagement: React.FC = () => {
         const currentOrderIds = new Set(data.orders.map((o) => o.id));
 
         if (isInitialLoadRef.current) {
-          // First load: memorize existing order IDs without alerting
+          // First load: memorize existing order IDs
           seenOrderIdsRef.current = currentOrderIds;
           isInitialLoadRef.current = false;
+
+          // Alert if there is a recent pending kitchen order (within last 15 mins) that needs immediate attention
+          const nowMs = Date.now();
+          const recentPending = data.orders.find((o) => {
+            if (o.orderStatus !== 'pending') return false;
+            const diff = nowMs - new Date(o.createdAt).getTime();
+            return diff >= 0 && diff < 15 * 60 * 1000;
+          });
+
+          if (recentPending && soundEnabled) {
+            playKitchenChime();
+            setNewOrderAlert({
+              orderNumber: recentPending.orderNumber,
+              tableNumber: recentPending.tableNumber,
+            });
+            setTimeout(() => setNewOrderAlert(null), 10000);
+          }
         } else {
           // Detect newly arrived kitchen orders
           let hasNewOrder = false;
@@ -227,6 +252,13 @@ export const OrdersManagement: React.FC = () => {
               orderNumber: newestOrderNumber,
               tableNumber: newestTableNumber,
             });
+            if (typeof document !== 'undefined') {
+              const prevTitle = document.title;
+              document.title = `🔔 NEW ORDER ${newestOrderNumber}! | Namahaa Admin`;
+              setTimeout(() => {
+                document.title = prevTitle;
+              }, 10000);
+            }
             setTimeout(() => setNewOrderAlert(null), 10000);
           }
         }

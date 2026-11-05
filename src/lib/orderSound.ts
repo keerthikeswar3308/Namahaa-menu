@@ -57,7 +57,7 @@ function playBellTone(
   freq: number,
   startTime: number,
   duration: number,
-  gainLevel: number = 0.75
+  gainLevel: number = 0.85
 ) {
   try {
     const osc1 = ctx.createOscillator();
@@ -107,12 +107,12 @@ export function synthesizeBellChime(ctx?: AudioContext | null): void {
       const now = activeCtx.currentTime;
 
       // Burst 1: Ascending crisp service chime
-      playBellTone(activeCtx, 783.99, now, 0.35, 0.75);         // G5
-      playBellTone(activeCtx, 1046.50, now + 0.12, 0.40, 0.85);  // C6
-      playBellTone(activeCtx, 1318.51, now + 0.24, 0.55, 0.95);  // E6
+      playBellTone(activeCtx, 783.99, now, 0.35, 0.85);         // G5
+      playBellTone(activeCtx, 1046.50, now + 0.12, 0.40, 0.95);  // C6
+      playBellTone(activeCtx, 1318.51, now + 0.24, 0.55, 1.00);  // E6
 
       // Burst 2: High confirmation chime (300ms after burst 1)
-      playBellTone(activeCtx, 1046.50, now + 0.55, 0.35, 0.85);  // C6
+      playBellTone(activeCtx, 1046.50, now + 0.55, 0.35, 0.90);  // C6
       playBellTone(activeCtx, 1318.51, now + 0.67, 0.40, 0.95);  // E6
       playBellTone(activeCtx, 1567.98, now + 0.79, 0.70, 1.00);  // G6
     } catch (err) {
@@ -129,12 +129,11 @@ export function synthesizeBellChime(ctx?: AudioContext | null): void {
 
 /**
  * Explicit User-Gesture Audio Unlock:
- * Triggered by tapping "Test & Activate Sound".
  * Resumes AudioContext, plays silent buffer for iOS Safari,
- * plays the loud chime immediately so the user hears it,
  * and permanently authorizes the tab for background sound playback.
+ * If silent: false, plays the loud chime immediately so the user hears it.
  */
-export async function unlockAudioAndPlay(): Promise<boolean> {
+export async function unlockAudioAndPlay(options: { silent?: boolean } = { silent: false }): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
   isUnlocked = true;
@@ -160,8 +159,10 @@ export async function unlockAudioAndPlay(): Promise<boolean> {
       source.connect(ctx.destination);
       source.start(0);
 
-      synthesizeBellChime(ctx);
-      played = true;
+      if (!options.silent) {
+        synthesizeBellChime(ctx);
+        played = true;
+      }
     }
   } catch (ctxErr) {
     console.warn('Web Audio unlock notice:', ctxErr);
@@ -171,12 +172,16 @@ export async function unlockAudioAndPlay(): Promise<boolean> {
   try {
     const audio = getAudioElement();
     if (audio) {
-      audio.currentTime = 0;
-      audio.volume = 1.0;
-      const promise = audio.play();
-      if (promise !== undefined) {
-        await promise;
-        played = true;
+      if (options.silent) {
+        audio.load();
+      } else {
+        audio.currentTime = 0;
+        audio.volume = 1.0;
+        const promise = audio.play();
+        if (promise !== undefined) {
+          await promise;
+          played = true;
+        }
       }
     }
   } catch (htmlErr) {
@@ -184,18 +189,23 @@ export async function unlockAudioAndPlay(): Promise<boolean> {
   }
 
   // 3. Vibrate device (vibration pattern: buzz-pause-buzz)
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+  if (!options.silent && typeof navigator !== 'undefined' && navigator.vibrate) {
     try {
       navigator.vibrate([250, 100, 250, 100, 400]);
     } catch {}
   }
+
+  // Notify components
+  try {
+    window.dispatchEvent(new CustomEvent('namaha_audio_unlocked'));
+  } catch {}
 
   return played;
 }
 
 /**
  * Autoplay Unlock Listener:
- * Unlocks audio context on the first user interaction anywhere on the document.
+ * Unlocks audio context on user interaction anywhere on the document.
  */
 export function initAudioUnlock(): void {
   if (typeof window === 'undefined') return;
@@ -205,6 +215,13 @@ export function initAudioUnlock(): void {
       const ctx = getAudioContext();
       if (ctx && ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
+      }
+      if (ctx) {
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
       }
       const audio = getAudioElement();
       if (audio) {
@@ -216,12 +233,14 @@ export function initAudioUnlock(): void {
           window.sessionStorage.setItem('namaha_sound_activated', 'true');
         }
       } catch {}
+      window.dispatchEvent(new CustomEvent('namaha_audio_unlocked'));
     } catch {}
   };
 
-  window.addEventListener('click', unlock, { passive: true, once: true });
-  window.addEventListener('touchstart', unlock, { passive: true, once: true });
-  window.addEventListener('pointerup', unlock, { passive: true, once: true });
+  window.addEventListener('click', unlock, { passive: true });
+  window.addEventListener('touchstart', unlock, { passive: true });
+  window.addEventListener('pointerup', unlock, { passive: true });
+  window.addEventListener('keydown', unlock, { passive: true });
 }
 
 /**

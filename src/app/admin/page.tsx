@@ -20,7 +20,7 @@ import { LayoutDashboard, Utensils, FolderTree, Settings, Camera, FileUp, LogOut
 
 
 import { OrderStore } from '@/lib/orderStore';
-import { initAudioUnlock, playKitchenChime } from '@/lib/orderSound';
+import { initAudioUnlock, playKitchenChime, unlockAudioAndPlay } from '@/lib/orderSound';
 
 import Link from 'next/link';
 
@@ -337,7 +337,10 @@ export default function AdminPage() {
             return (
               <button
                 key={t.id}
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => {
+                  setActiveTab(t.id);
+                  unlockAudioAndPlay({ silent: true }).catch(() => {});
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
                   isActive
                     ? 'bg-namaha-gold text-namaha-green-deep shadow-namaha-gold scale-102'

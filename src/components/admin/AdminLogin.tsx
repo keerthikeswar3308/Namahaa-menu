@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { NamahaLogo } from '../NamahaLogo';
 import { ShieldCheck, ArrowRight, KeyRound, AlertCircle, Eye, EyeOff, Lock, User } from 'lucide-react';
 import { NamahaStore } from '@/lib/store';
+import { unlockAudioAndPlay } from '@/lib/orderSound';
 
 interface AdminLoginProps {
   onSuccess: () => void;
@@ -40,6 +41,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
           localStorage.setItem('namahaa_admin_auth_code', passcode.trim());
           localStorage.setItem('namahaa_admin_username', username.trim());
         }
+        unlockAudioAndPlay({ silent: true }).catch(() => {});
         NamahaStore.setAdminLoggedIn(true, data.token);
         onSuccess();
       } else {
