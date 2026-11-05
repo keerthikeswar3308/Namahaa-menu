@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
       updated_at: nowISO,
     };
 
-    // Race Supabase insert with a 1200ms timeout so user UI never hangs
+    // Race Supabase insert with a fast 350ms timeout so user UI never hangs or lags on mobile
     const insertPromise = supabaseAdmin.from('orders').insert([newOrderPayload]);
-    const timeoutPromise = new Promise<{ timeout: true }>((resolve) => setTimeout(() => resolve({ timeout: true }), 1200));
+    const timeoutPromise = new Promise<{ timeout: true }>((resolve) => setTimeout(() => resolve({ timeout: true }), 350));
 
     try {
       const raceResult = await Promise.race([insertPromise, timeoutPromise]);

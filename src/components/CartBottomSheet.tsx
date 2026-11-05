@@ -284,7 +284,7 @@ const CartBottomSheetInner: React.FC = () => {
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 animate-fade-in">
       
       {/* Backdrop overlay click to close */}
       <div className="absolute inset-0" onClick={closeCart} />
@@ -292,39 +292,39 @@ const CartBottomSheetInner: React.FC = () => {
       {/* Bottom Sheet Drawer / Modal Container */}
       <div className="relative w-full sm:max-w-lg bg-namaha-green-dark border-t-2 sm:border-2 border-namaha-gold/40 rounded-t-3xl sm:rounded-3xl shadow-2xl text-white max-h-[85vh] sm:max-h-[80vh] flex flex-col overflow-hidden z-10 animate-slide-up sm:animate-scale-up">
         
-        {/* Full Viewport Centered Overlay when Order is Submitting / Transmitting */}
+        {/* Full Viewport Centered Overlay when Order is Submitting / Transmitting (Lightweight & Hardware-Accelerated) */}
         {isSubmittingOrder && (
-          <div className="fixed inset-0 z-[100] bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-5 animate-fade-in my-auto">
+          <div className="fixed inset-0 z-[100] bg-[#0c1f17] flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fade-in my-auto will-change-transform">
             {/* Above Loading: Estimated prep timer & status note */}
-            <div className="space-y-2 max-w-xs">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold text-[11px] font-extrabold tracking-wide uppercase shadow-sm">
-                <Clock className="w-3.5 h-3.5 text-namaha-gold animate-pulse" />
+            <div className="space-y-1.5 max-w-xs">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-namaha-gold/20 border border-namaha-gold/40 text-namaha-gold text-[11px] font-extrabold tracking-wide uppercase">
+                <Clock className="w-3.5 h-3.5 text-namaha-gold" />
                 <span>Est. Kitchen Prep: ~15–20 Mins</span>
               </div>
-              <h3 className="text-lg font-serif font-bold text-white pt-1">
+              <h3 className="text-xl font-serif font-bold text-white pt-1">
                 Sending Order to Kitchen...
               </h3>
-              <p className="text-xs text-emerald-300 font-semibold leading-relaxed">
+              <p className="text-xs text-emerald-300 font-medium leading-relaxed">
                 Transmitting table items directly to kitchen display
               </p>
             </div>
 
-            {/* Center Loading Spinner & Utensils Icon */}
+            {/* Center Loading Spinner & Utensils Icon (Ultra-lightweight GPU rotation) */}
             <div className="relative flex items-center justify-center my-2">
-              <div className="w-20 h-20 rounded-full border-4 border-namaha-gold/20 border-t-namaha-gold animate-spin" />
-              <div className="absolute p-3.5 rounded-full bg-namaha-gold/15 text-namaha-gold">
-                <Utensils className="w-7 h-7 animate-bounce" />
+              <div className="w-16 h-16 rounded-full border-3 border-namaha-gold/20 border-t-namaha-gold animate-spin will-change-transform" />
+              <div className="absolute p-3 rounded-full bg-namaha-gold/15 text-namaha-gold">
+                <Utensils className="w-6 h-6" />
               </div>
             </div>
 
             {/* Below Loading: Keep screen active note */}
-            <div className="p-3.5 rounded-2xl bg-black/60 border border-amber-500/30 text-amber-300 text-xs font-semibold max-w-xs space-y-1 shadow-xl">
+            <div className="p-3.5 rounded-2xl bg-black/60 border border-amber-500/30 text-amber-300 text-xs font-semibold max-w-xs space-y-1 shadow-lg">
               <div className="flex items-center justify-center gap-1.5 text-amber-400 font-bold text-xs">
-                <Smartphone className="w-4 h-4 animate-pulse" />
-                <span>Please Keep Screen Active</span>
+                <Smartphone className="w-4 h-4" />
+                <span>Connecting Table #{selectedTable}</span>
               </div>
               <p className="text-[11px] text-gray-300 font-normal leading-normal">
-                Do not turn off your screen or navigate away until order transmission completes.
+                Transmitting directly to chefs. Please do not close screen.
               </p>
             </div>
           </div>
@@ -332,7 +332,7 @@ const CartBottomSheetInner: React.FC = () => {
 
         {/* Full Viewport Centered Overlay when Order is Successfully Sent */}
         {orderSuccessConfirmation && !isSubmittingOrder && (
-          <div className="fixed inset-0 z-[100] bg-namaha-green-dark/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fade-in my-auto overflow-y-auto">
+          <div className="fixed inset-0 z-[100] bg-[#0c1f17] flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fade-in my-auto overflow-y-auto">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 text-emerald-400 flex items-center justify-center shadow-lg flex-shrink-0 animate-bounce">
               <CheckCircle2 className="w-9 h-9" />
             </div>
@@ -643,15 +643,6 @@ const CartBottomSheetInner: React.FC = () => {
           /* 3. CHECKOUT & ORDER DETAILS SCREEN MODE                 */
           /* ======================================================== */
           <div className="relative p-6 space-y-5 flex-1 overflow-y-auto">
-            {isSubmittingOrder && (
-              <div className="absolute inset-0 z-40 bg-namaha-green-deep/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-namaha-gold to-amber-400 flex items-center justify-center shadow-2xl mb-3">
-                  <Loader2 className="w-7 h-7 text-namaha-green-deep animate-spin" />
-                </div>
-                <h3 className="text-base font-serif font-bold text-white">Sending Order to Kitchen...</h3>
-                <p className="text-xs text-amber-200/80 mt-1">Connecting Table #{selectedTable} with kitchen chefs</p>
-              </div>
-            )}
             <div className="flex items-center justify-between">
               <h3 className="text-base font-serif font-bold text-namaha-gold flex items-center gap-2">
                 <ChefHat className="w-5 h-5 text-amber-400" /> Confirm Kitchen Order
@@ -883,9 +874,9 @@ const CartBottomSheetInner: React.FC = () => {
 
         {/* Clear Cart Confirmation Dialog */}
         {showClearConfirm && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="absolute inset-0 z-20 flex items-center justify-center p-4 bg-black/90 animate-fade-in">
             <div className="p-6 rounded-3xl bg-namaha-green-dark border-2 border-red-500/50 text-center space-y-4 max-w-sm w-full shadow-2xl">
-              <AlertCircle className="w-10 h-10 text-red-400 mx-auto animate-bounce" />
+              <AlertCircle className="w-10 h-10 text-red-400 mx-auto" />
               <div>
                 <h4 className="text-base font-serif font-bold text-white">Clear all items from your cart?</h4>
                 <p className="text-xs text-gray-400 mt-1">This will remove all {totalCount} items and reset your cart.</p>
@@ -916,7 +907,7 @@ const CartBottomSheetInner: React.FC = () => {
 
         {/* Order Details View Modal Popup */}
         {selectedOrderDetails && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/90 animate-fade-in">
             <div className="p-6 rounded-3xl bg-namaha-green-dark border-2 border-namaha-gold/50 text-left space-y-4 max-w-md w-full shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
               
               {/* Modal Header */}
@@ -1135,7 +1126,7 @@ class CartErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-fade-in">
           <div className="bg-[#023835] border border-namaha-gold/40 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
             <AlertCircle className="w-12 h-12 text-namaha-gold mx-auto" />
             <h3 className="text-lg font-serif font-bold text-white">Cart Temporarily Refreshed</h3>
