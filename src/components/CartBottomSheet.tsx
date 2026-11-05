@@ -510,7 +510,7 @@ const CartBottomSheetInner: React.FC = () => {
                           </div>
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-namaha-gold/15 text-namaha-gold border border-namaha-gold/30 flex items-center gap-1 flex-shrink-0">
                             <Heart className="w-3.5 h-3.5 fill-namaha-gold/30 text-namaha-gold" />
-                            <span>Thank You!</span>
+                            <span>Thank you</span>
                           </span>
                         </div>
 
@@ -960,13 +960,13 @@ const CartBottomSheetInner: React.FC = () => {
                 </div>
 
                 {/* Thank You Note (No payment status shown) */}
-                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-namaha-gold/10 border border-namaha-gold/30 text-xs">
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-namaha-gold/15 border border-namaha-gold/30 text-xs">
                   <div className="flex items-center gap-1.5 text-namaha-gold font-semibold">
                     <Heart className="w-4 h-4 fill-namaha-gold/30 text-namaha-gold" />
-                    <span>Namahaa Tiffin Room</span>
+                    <span>Order Confirmed</span>
                   </div>
                   <span className="font-extrabold text-amber-300">
-                    Thank You!
+                    Thank you
                   </span>
                 </div>
 
