@@ -33,19 +33,45 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Fast Single-Item Stock Availability Toggle (< 25ms)
-    if (action === 'toggle_availability' && body.itemId) {
-      const { data, error } = await supabaseAdmin
-        .from('menu_items')
-        .update({
-          is_available: Boolean(body.isAvailable),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', body.itemId)
-        .select('id, name, is_available');
+    if (action === 'toggle_availability' && (body.itemId || body.itemName)) {
+      let data: any = null;
+      let updateError: any = null;
 
-      if (error) {
-        console.error('Supabase toggle_availability error:', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      if (body.itemId) {
+        const res = await supabaseAdmin
+          .from('menu_items')
+          .update({
+            is_available: Boolean(body.isAvailable),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', body.itemId)
+          .select('id, name, is_available');
+
+        data = res.data;
+        updateError = res.error;
+      }
+
+      // If ID didn't match any row or wasn't provided, fallback to item name matching
+      if ((!data || data.length === 0) && body.itemName) {
+        const cleanName = String(body.itemName).trim();
+        const res = await supabaseAdmin
+          .from('menu_items')
+          .update({
+            is_available: Boolean(body.isAvailable),
+            updated_at: new Date().toISOString(),
+          })
+          .ilike('name', cleanName)
+          .select('id, name, is_available');
+
+        if (res.data && res.data.length > 0) {
+          data = res.data;
+          updateError = null;
+        }
+      }
+
+      if (updateError) {
+        console.error('Supabase toggle_availability error:', updateError);
+        return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });
       }
 
       return NextResponse.json({ success: true, updatedItem: data?.[0] });

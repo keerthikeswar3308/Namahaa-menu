@@ -114,21 +114,22 @@ export default function AdminPage() {
   };
 
   const handleToggleItemStatus = async (id: string, isAvailable: boolean) => {
+    // 1. Immediate optimistic state update (0ms UI lag)
+    setMenuItems((prev) => prev.map((item) => (item.id === id ? { ...item, isAvailable } : item)));
     try {
-      // 1. Immediate optimistic state update
-      setMenuItems((prev) => prev.map((item) => (item.id === id ? { ...item, isAvailable } : item)));
       // 2. Direct fast update in Supabase
       await NamahaStore.toggleMenuItemAvailability(id, isAvailable);
     } catch (err: any) {
       alert(`Failed to update stock status in Supabase: ${err.message}`);
-      await loadAllData();
+      // Revert only on true failure
+      setMenuItems((prev) => prev.map((item) => (item.id === id ? { ...item, isAvailable: !isAvailable } : item)));
     }
   };
 
   const handleBulkToggleItemStatus = async (itemIds: string[], isAvailable: boolean) => {
+    const idSet = new Set(itemIds);
+    setMenuItems((prev) => prev.map((item) => (idSet.has(item.id) ? { ...item, isAvailable } : item)));
     try {
-      const idSet = new Set(itemIds);
-      setMenuItems((prev) => prev.map((item) => (idSet.has(item.id) ? { ...item, isAvailable } : item)));
       await NamahaStore.bulkToggleMenuItemsAvailability(itemIds, isAvailable);
     } catch (err: any) {
       alert(`Failed to update bulk stock in Supabase: ${err.message}`);
